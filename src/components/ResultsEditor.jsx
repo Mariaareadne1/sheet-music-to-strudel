@@ -8,94 +8,102 @@ import InfoBadges from './InfoBadges.jsx'
 /**
  * ResultsEditor
  *
- * Shows the generated Strudel code in an editable CodeMirror 6 editor and
- * provides three action buttons:
- *   – Open in Strudel REPL  (encodes with lz-string, the format Strudel expects)
- *   – Copy Code             (writes to clipboard)
- *   – Convert Another       (calls onReset to go back to the upload screen)
+ * Shows the generated Strudel code in an editable CodeMirror 6 editor with:
+ *   - A thumbnail preview of the uploaded sheet music above the editor
+ *   - Metadata badges (title, BPM, time sig, key)
+ *   - A prominent "Open in Strudel REPL" button (primary action)
+ *   - A "?" tooltip explaining what the REPL button does
+ *   - Copy Code and Convert Another buttons
  *
  * Props:
- *   code    – initial Strudel code string from the compiler
- *   meta    – raw JSON returned by Claude (for InfoBadges)
- *   theme   – 'dark' | 'light' (controls CodeMirror theme)
- *   onReset – callback to return to the upload screen
+ *   code      – initial Strudel code string
+ *   meta      – music metadata from Claude (for InfoBadges)
+ *   theme     – 'dark' | 'light' (CodeMirror theme)
+ *   thumbnail – base64 JPEG string or null
+ *   onReset   – returns to upload screen
  */
-export default function ResultsEditor({ code, meta, theme, onReset }) {
+export default function ResultsEditor({ code, meta, theme, thumbnail, onReset }) {
   const [editorCode, setEditorCode] = useState(code)
-  const [copied, setCopied]         = useState(false)
+  const [copied,     setCopied]     = useState(false)
+  const [showTooltip, setShowTooltip] = useState(false)
 
   const onChange = useCallback(val => setEditorCode(val), [])
 
   /**
-   * Encodes the current editor content and opens it in the Strudel REPL.
+   * Encodes the editor content with LZString and opens it in Strudel REPL.
    *
-   * Strudel's REPL (strudel.cc) decodes its URL hash using
-   * LZString.decompressFromEncodedURIComponent(), so we must use the matching
-   * compressor rather than plain btoa.  The lz-string library produces a
-   * compact, URL-safe string that also works for long pieces.
+   * Strudel's hash decoder uses LZString.decompressFromEncodedURIComponent()
+   * so we must use the matching compressor.  Plain btoa would produce URLs
+   * that Strudel cannot decode.
    */
   function openInStrudel() {
     const encoded = LZString.compressToEncodedURIComponent(editorCode)
     window.open(`https://strudel.cc/#${encoded}`, '_blank', 'noopener,noreferrer')
   }
 
-  /** Writes the current editor content to the system clipboard. */
+  /** Writes editor content to the clipboard with a textarea fallback. */
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(editorCode)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback for browsers that block clipboard without HTTPS
       const el = document.createElement('textarea')
       el.value = editorCode
       document.body.appendChild(el)
       el.select()
       document.execCommand('copy')
       document.body.removeChild(el)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
     }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
-  // Apply the one-dark theme only in dark mode; use CodeMirror's default light
-  // theme otherwise so the editor matches the rest of the UI.
   const cmTheme = theme === 'dark' ? oneDark : undefined
 
   return (
     <div className="w-full max-w-4xl space-y-4 px-2 sm:px-0">
 
-      {/* Header row: title + metadata badges + back button */}
+      {/* ── Top row: heading + back button ─────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div className="space-y-2 min-w-0">
-          <h2 className="font-mono text-base sm:text-lg" style={{ color: 'var(--accent)' }}>
-            // Strudel code generated
-          </h2>
-          <InfoBadges meta={meta} />
-        </div>
-
+        <h2 className="font-mono text-sm sm:text-base" style={{ color: 'var(--accent)' }}>
+          // Strudel code generated
+        </h2>
         <button
           onClick={onReset}
           className="text-xs font-mono px-3 py-1.5 rounded border transition-colors self-start flex-shrink-0"
           style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-secondary)' }}
-          onMouseOver={e => {
-            e.currentTarget.style.borderColor = 'var(--accent)'
-            e.currentTarget.style.color = 'var(--accent)'
-          }}
-          onMouseOut={e => {
-            e.currentTarget.style.borderColor = 'var(--border-subtle)'
-            e.currentTarget.style.color = 'var(--text-secondary)'
-          }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
+          onMouseOut={e =>  { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.color = 'var(--text-secondary)' }}
         >
           ← Convert Another
         </button>
       </div>
 
-      {/* CodeMirror editor */}
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{ border: '1px solid var(--border)' }}
-      >
+      {/* ── Thumbnail + metadata ─────────────────────────────────────────────── */}
+      <div className="flex items-start gap-4">
+        {thumbnail && (
+          <div
+            className="flex-shrink-0 rounded-lg overflow-hidden"
+            style={{
+              width:  '100px',
+              height: '65px',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <img
+              src={`data:image/jpeg;base64,${thumbnail}`}
+              alt="Uploaded sheet music"
+              className="w-full h-full object-cover"
+              style={{ opacity: 0.85 }}
+            />
+          </div>
+        )}
+        <div className="flex-1 space-y-2 min-w-0">
+          <InfoBadges meta={meta} />
+        </div>
+      </div>
+
+      {/* ── CodeMirror editor ─────────────────────────────────────────────── */}
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
         <CodeMirror
           value={editorCode}
           extensions={[javascript()]}
@@ -112,27 +120,89 @@ export default function ResultsEditor({ code, meta, theme, onReset }) {
         />
       </div>
 
-      {/* Action buttons */}
-      <div className="flex flex-wrap gap-3">
-        {/* Primary CTA: opens Strudel REPL in a new tab */}
-        <button
-          onClick={openInStrudel}
-          className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded font-mono text-xs sm:text-sm font-medium transition-all"
-          style={{ background: 'var(--accent)', color: '#0f0f0f' }}
-          onMouseOver={e => { e.currentTarget.style.background = 'var(--accent-hover)' }}
-          onMouseOut={e =>  { e.currentTarget.style.background = 'var(--accent)' }}
-        >
-          <span>▶</span> Open in Strudel REPL
-        </button>
+      {/* ── Action buttons ────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-center gap-3">
 
-        {/* Secondary: copy to clipboard */}
+        {/* Primary CTA — most important button on the page */}
+        <div className="relative flex items-center gap-2">
+          <button
+            onClick={openInStrudel}
+            className="flex items-center gap-2 px-5 sm:px-6 py-3 rounded-lg font-mono text-sm font-bold transition-all shadow-lg"
+            style={{
+              background:  'var(--accent)',
+              color:        '#0f0f0f',
+              boxShadow:    '0 0 20px var(--accent-muted)',
+              fontSize:     '14px',
+              letterSpacing: '0.02em',
+            }}
+            onMouseOver={e => {
+              e.currentTarget.style.background  = 'var(--accent-hover)'
+              e.currentTarget.style.boxShadow   = '0 0 30px var(--accent-border)'
+              e.currentTarget.style.transform   = 'translateY(-1px)'
+            }}
+            onMouseOut={e => {
+              e.currentTarget.style.background  = 'var(--accent)'
+              e.currentTarget.style.boxShadow   = '0 0 20px var(--accent-muted)'
+              e.currentTarget.style.transform   = 'translateY(0)'
+            }}
+          >
+            <span>▶</span> Open in Strudel REPL
+          </button>
+
+          {/* "?" tooltip trigger */}
+          <div className="relative">
+            <button
+              className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
+              style={{
+                background: 'var(--surface-raised)',
+                border:     '1px solid var(--border-subtle)',
+                color:      'var(--text-secondary)',
+                cursor:     'help',
+              }}
+              onMouseEnter={() => setShowTooltip(true)}
+              onMouseLeave={() => setShowTooltip(false)}
+              onFocus={() => setShowTooltip(true)}
+              onBlur={() => setShowTooltip(false)}
+              aria-label="What is Strudel REPL?"
+            >
+              ?
+            </button>
+            {showTooltip && (
+              <div
+                className="absolute left-0 bottom-7 z-10 rounded-lg p-3 text-xs font-mono leading-relaxed shadow-xl"
+                style={{
+                  width:      '220px',
+                  background: 'var(--surface)',
+                  border:     '1px solid var(--border)',
+                  color:      'var(--text-primary)',
+                }}
+              >
+                Opens your code in the Strudel live coding environment at strudel.cc — play, edit, and perform your transcription in real time.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Copy Code */}
         <button
           onClick={copyCode}
-          className="flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded font-mono text-xs sm:text-sm border transition-all"
+          className="flex items-center gap-2 px-5 py-3 rounded-lg font-mono text-sm border transition-all"
           style={{
-            borderColor: copied ? '#4ade80' : 'var(--accent)',
-            color:        copied ? '#4ade80' : 'var(--accent)',
+            borderColor: copied ? '#4ade80' : 'var(--border-subtle)',
+            color:        copied ? '#4ade80' : 'var(--text-secondary)',
             background:   'transparent',
+          }}
+          onMouseOver={e => {
+            if (!copied) {
+              e.currentTarget.style.borderColor = 'var(--accent)'
+              e.currentTarget.style.color = 'var(--accent)'
+            }
+          }}
+          onMouseOut={e => {
+            if (!copied) {
+              e.currentTarget.style.borderColor = 'var(--border-subtle)'
+              e.currentTarget.style.color = 'var(--text-secondary)'
+            }
           }}
         >
           {copied ? '✓ Copied!' : '⎘ Copy Code'}
@@ -140,7 +210,7 @@ export default function ResultsEditor({ code, meta, theme, onReset }) {
       </div>
 
       <p className="text-xs font-mono" style={{ color: 'var(--text-dim)' }}>
-        // The editor is fully editable — tweak the code before opening in Strudel
+        // Editor is fully editable — tweak the code before opening in Strudel
       </p>
     </div>
   )

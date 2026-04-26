@@ -3,46 +3,46 @@
 @tailwind utilities;
 
 /* ── Theme tokens ─────────────────────────────────────────────────────────── */
-/* All component colors reference these variables so toggling data-theme on    */
-/* the root div re-colors the entire app without touching component code.      */
+/* All component colors reference CSS variables so toggling data-theme on     */
+/* <html> re-colors the entire app without touching any component code.       */
 
 :root {
-  --bg:              #0f0f0f;
-  --surface:         #111111;
-  --surface-raised:  #1a1a1a;
-  --border:          #2a2a2a;
-  --border-subtle:   #333333;
-  --text-primary:    #e0e0e0;
-  --text-secondary:  #888888;
-  --text-dim:        #444444;
-  --accent:          #ff69b4;
-  --accent-hover:    #ff85c2;
-  --accent-muted:    rgba(255, 105, 180, 0.1);
-  --accent-border:   rgba(255, 105, 180, 0.3);
-  --error-bg:        rgba(127, 29, 29, 0.2);
-  --error-border:    #7f1d1d;
-  --error-text:      #fca5a5;
-  --scrollbar-track: #1a1a1a;
+  --bg:               #0f0f0f;
+  --surface:          #111111;
+  --surface-raised:   #1a1a1a;
+  --border:           #2a2a2a;
+  --border-subtle:    #333333;
+  --text-primary:     #e0e0e0;
+  --text-secondary:   #888888;
+  --text-dim:         #444444;
+  --accent:           #ff69b4;
+  --accent-hover:     #ff85c2;
+  --accent-muted:     rgba(255, 105, 180, 0.1);
+  --accent-border:    rgba(255, 105, 180, 0.3);
+  --error-bg:         rgba(127, 29, 29, 0.2);
+  --error-border:     #7f1d1d;
+  --error-text:       #fca5a5;
+  --scrollbar-track:  #1a1a1a;
 }
 
 [data-theme="light"] {
-  --bg:              #f4f4f4;
-  --surface:         #ffffff;
-  --surface-raised:  #ededed;
-  --border:          #e0e0e0;
-  --border-subtle:   #cccccc;
-  --text-primary:    #1a1a1a;
-  --text-secondary:  #666666;
-  --text-dim:        #999999;
-  /* Slightly deeper pink so it has enough contrast on white */
-  --accent:          #d6186e;
-  --accent-hover:    #b0145a;
-  --accent-muted:    rgba(214, 24, 110, 0.08);
-  --accent-border:   rgba(214, 24, 110, 0.28);
-  --error-bg:        rgba(220, 38, 38, 0.07);
-  --error-border:    #f87171;
-  --error-text:      #dc2626;
-  --scrollbar-track: #e0e0e0;
+  --bg:               #f4f4f4;
+  --surface:          #ffffff;
+  --surface-raised:   #ededed;
+  --border:           #e0e0e0;
+  --border-subtle:    #cccccc;
+  --text-primary:     #1a1a1a;
+  --text-secondary:   #666666;
+  --text-dim:         #999999;
+  /* Deeper pink for sufficient contrast on white backgrounds */
+  --accent:           #d6186e;
+  --accent-hover:     #b0145a;
+  --accent-muted:     rgba(214, 24, 110, 0.08);
+  --accent-border:    rgba(214, 24, 110, 0.28);
+  --error-bg:         rgba(220, 38, 38, 0.07);
+  --error-border:     #f87171;
+  --error-text:       #dc2626;
+  --scrollbar-track:  #e0e0e0;
 }
 
 /* ── Base ─────────────────────────────────────────────────────────────────── */
@@ -55,9 +55,10 @@ body {
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   min-height: 100vh;
   margin: 0;
-  /* Smooth color transition when toggling themes */
   transition: background-color 0.2s ease, color 0.2s ease;
 }
+
+#root { overflow-x: hidden; }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
 
@@ -69,7 +70,7 @@ body {
 
 .cm-editor {
   font-family: 'JetBrains Mono', monospace !important;
-  font-size: 14px;
+  font-size: 13px;
   border-radius: 8px;
   border: 1px solid var(--border);
 }
@@ -78,15 +79,18 @@ body {
   outline: 1px solid var(--accent) !important;
 }
 
-/* Cap editor height and scroll on mobile; taller on larger screens */
+/* Taller editor: min 400px on desktop, scrollable on mobile */
 .cm-scroller {
-  max-height: 55vh;
   min-height: 200px;
+  max-height: 55vh;
   overflow: auto;
 }
 
 @media (min-width: 640px) {
-  .cm-scroller { max-height: 500px; }
+  .cm-scroller {
+    min-height: 400px;
+    max-height: 70vh;
+  }
 }
 
 /* ── Drag-over highlight ──────────────────────────────────────────────────── */
@@ -102,17 +106,15 @@ body {
   to { transform: rotate(360deg); }
 }
 
-.spinner {
-  animation: spin 1s linear infinite;
-}
+.spinner { animation: spin 1s linear infinite; }
 
-/* Pulse used on loading dots */
+/* Pulsing dots on processing screen */
 @keyframes pulse-pink {
-  0%, 100% { opacity: 1; transform: scale(1); }
+  0%, 100% { opacity: 1;   transform: scale(1);    }
   50%       { opacity: 0.4; transform: scale(0.75); }
 }
 
-/* Subtle glow on accent text in dark mode */
+/* Glowing accent text */
 @keyframes accent-glow {
   0%, 100% { text-shadow: 0 0 8px var(--accent), 0 0 20px var(--accent); }
   50%       { text-shadow: 0 0 4px var(--accent), 0 0 10px var(--accent); }
@@ -123,18 +125,37 @@ body {
   animation: accent-glow 2s ease-in-out infinite;
 }
 
+/* ── Scanning line (ProcessingScreen thumbnail effect) ────────────────────── */
+
+/* A hot-pink line sweeps from top to bottom over the sheet music thumbnail   */
+/* to give the impression Claude is scanning the image.                        */
+@keyframes scan {
+  0%   { top: -4px; }
+  100% { top: calc(100% + 4px); }
+}
+
+.scan-line {
+  position:   absolute;
+  left:       0;
+  right:      0;
+  height:     3px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--accent),
+    var(--accent),
+    transparent
+  );
+  box-shadow: 0 0 8px var(--accent), 0 0 16px var(--accent-muted);
+  animation:  scan 1.8s linear infinite;
+  pointer-events: none;
+}
+
 /* ── Progress bar ─────────────────────────────────────────────────────────── */
 
 .progress-bar-fill {
-  background: var(--accent);
-  height: 100%;
+  background:    var(--accent);
+  height:        100%;
   border-radius: 999px;
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ── Mobile layout helpers ────────────────────────────────────────────────── */
-
-/* Ensure the full app doesn't scroll horizontally on small screens */
-#root {
-  overflow-x: hidden;
+  transition:    width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }

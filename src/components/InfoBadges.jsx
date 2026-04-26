@@ -1,14 +1,13 @@
 /**
  * InfoBadges
  *
- * Renders small pill-shaped badges showing the music metadata detected by
- * Claude: title, BPM, and time signature.  Any field that's missing is simply
- * omitted rather than showing a placeholder.
+ * Renders pill-shaped metadata badges for title, BPM, time signature, and
+ * key signature detected by Claude.  Any field that's missing is omitted.
  */
 export default function InfoBadges({ meta }) {
   if (!meta) return null
 
-  const { title, bpm, timeSignature } = meta
+  const { title, bpm, timeSignature, key } = meta
 
   const items = [
     title         && { label: 'title', value: title },
@@ -19,6 +18,7 @@ export default function InfoBadges({ meta }) {
         ? `${timeSignature[0]}/${timeSignature[1]}`
         : timeSignature,
     },
+    key           && { label: 'key',   value: key   },
   ].filter(Boolean)
 
   if (items.length === 0) return null
