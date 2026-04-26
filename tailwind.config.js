@@ -4,15 +4,27 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  // Class-based dark mode so we can toggle via data-theme on the root element
+  darkMode: 'class',
   theme: {
     extend: {
+      // Map Tailwind color names to CSS custom properties so every component
+      // automatically re-colors when the theme changes
       colors: {
-        accent: '#ff69b4',
-        dark: '#0f0f0f',
+        bg:             'var(--bg)',
+        surface:        'var(--surface)',
+        'surface-raised': 'var(--surface-raised)',
+        border:         'var(--border)',
+        'border-subtle':'var(--border-subtle)',
+        'text-primary': 'var(--text-primary)',
+        'text-secondary':'var(--text-secondary)',
+        'text-dim':     'var(--text-dim)',
+        accent:         'var(--accent)',
+        'accent-hover': 'var(--accent-hover)',
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
-      }
+      },
     },
   },
   plugins: [],

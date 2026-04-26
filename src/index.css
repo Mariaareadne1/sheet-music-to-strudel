@@ -2,60 +2,102 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme tokens ─────────────────────────────────────────────────────────── */
+/* All component colors reference these variables so toggling data-theme on    */
+/* the root div re-colors the entire app without touching component code.      */
+
 :root {
-  --accent: #ff69b4;
-  --dark: #0f0f0f;
+  --bg:              #0f0f0f;
+  --surface:         #111111;
+  --surface-raised:  #1a1a1a;
+  --border:          #2a2a2a;
+  --border-subtle:   #333333;
+  --text-primary:    #e0e0e0;
+  --text-secondary:  #888888;
+  --text-dim:        #444444;
+  --accent:          #ff69b4;
+  --accent-hover:    #ff85c2;
+  --accent-muted:    rgba(255, 105, 180, 0.1);
+  --accent-border:   rgba(255, 105, 180, 0.3);
+  --error-bg:        rgba(127, 29, 29, 0.2);
+  --error-border:    #7f1d1d;
+  --error-text:      #fca5a5;
+  --scrollbar-track: #1a1a1a;
 }
 
-* {
-  box-sizing: border-box;
+[data-theme="light"] {
+  --bg:              #f4f4f4;
+  --surface:         #ffffff;
+  --surface-raised:  #ededed;
+  --border:          #e0e0e0;
+  --border-subtle:   #cccccc;
+  --text-primary:    #1a1a1a;
+  --text-secondary:  #666666;
+  --text-dim:        #999999;
+  /* Slightly deeper pink so it has enough contrast on white */
+  --accent:          #d6186e;
+  --accent-hover:    #b0145a;
+  --accent-muted:    rgba(214, 24, 110, 0.08);
+  --accent-border:   rgba(214, 24, 110, 0.28);
+  --error-bg:        rgba(220, 38, 38, 0.07);
+  --error-border:    #f87171;
+  --error-text:      #dc2626;
+  --scrollbar-track: #e0e0e0;
 }
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
 
 body {
-  background-color: #0f0f0f;
-  color: #e0e0e0;
+  background-color: var(--bg);
+  color: var(--text-primary);
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   min-height: 100vh;
   margin: 0;
+  /* Smooth color transition when toggling themes */
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: #1a1a1a;
-}
-::-webkit-scrollbar-thumb {
-  background: #ff69b4;
-  border-radius: 3px;
-}
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
 
-/* CodeMirror overrides */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb  { background: var(--accent); border-radius: 3px; }
+
+/* ── CodeMirror overrides ─────────────────────────────────────────────────── */
+
 .cm-editor {
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 14px;
   border-radius: 8px;
-  border: 1px solid #2a2a2a;
+  border: 1px solid var(--border);
 }
 
 .cm-editor.cm-focused {
-  outline: 1px solid #ff69b4 !important;
+  outline: 1px solid var(--accent) !important;
 }
 
+/* Cap editor height and scroll on mobile; taller on larger screens */
 .cm-scroller {
-  max-height: 500px;
+  max-height: 55vh;
+  min-height: 200px;
   overflow: auto;
 }
 
-/* Drag-over highlight */
-.drag-over {
-  border-color: #ff69b4 !important;
-  background-color: rgba(255, 105, 180, 0.05) !important;
+@media (min-width: 640px) {
+  .cm-scroller { max-height: 500px; }
 }
 
-/* Spinner animation */
+/* ── Drag-over highlight ──────────────────────────────────────────────────── */
+
+.drag-over {
+  border-color: var(--accent) !important;
+  background-color: var(--accent-muted) !important;
+}
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -64,13 +106,35 @@ body {
   animation: spin 1s linear infinite;
 }
 
-/* Glitch/pulse for accent text */
+/* Pulse used on loading dots */
 @keyframes pulse-pink {
-  0%, 100% { text-shadow: 0 0 8px #ff69b4, 0 0 20px #ff69b4; }
-  50% { text-shadow: 0 0 4px #ff69b4, 0 0 10px #ff69b4; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* Subtle glow on accent text in dark mode */
+@keyframes accent-glow {
+  0%, 100% { text-shadow: 0 0 8px var(--accent), 0 0 20px var(--accent); }
+  50%       { text-shadow: 0 0 4px var(--accent), 0 0 10px var(--accent); }
 }
 
 .accent-glow {
-  color: #ff69b4;
-  animation: pulse-pink 2s ease-in-out infinite;
+  color: var(--accent);
+  animation: accent-glow 2s ease-in-out infinite;
+}
+
+/* ── Progress bar ─────────────────────────────────────────────────────────── */
+
+.progress-bar-fill {
+  background: var(--accent);
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Mobile layout helpers ────────────────────────────────────────────────── */
+
+/* Ensure the full app doesn't scroll horizontally on small screens */
+#root {
+  overflow-x: hidden;
 }
