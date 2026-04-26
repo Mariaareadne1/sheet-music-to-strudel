@@ -181,12 +181,14 @@ export async function callClaudeAPI(images) {
 // ── JSON extraction helpers ───────────────────────────────────────────────────
 
 /**
- * Tries three increasingly-permissive strategies to extract valid JSON from
+ * Tries four increasingly-permissive strategies to extract valid JSON from
  * Claude's raw text output, then validates and normalises the structure.
  *
  * Strategy 1: strip markdown fences, parse directly.
  * Strategy 2: extract the first {...} block via regex.
  * Strategy 3: slice from the first '{' character.
+ * Strategy 4: run repairTruncatedJSON on the sliced string and try again.
+ *             This handles responses cut off mid-value by a max_tokens limit.
  */
 function extractAndValidateJSON(rawText) {
   // Strategy 1 — strip optional markdown fences and try a direct parse
@@ -204,9 +206,14 @@ function extractAndValidateJSON(rawText) {
   }
 
   // Strategy 3 — drop any leading prose before the first '{'
-  if (!parsed) {
-    const start = rawText.indexOf('{')
-    if (start !== -1) parsed = tryParse(rawText.slice(start))
+  const fromBrace = rawText.slice(rawText.indexOf('{'))
+  if (!parsed && rawText.includes('{')) {
+    parsed = tryParse(fromBrace)
+  }
+
+  // Strategy 4 — attempt to close a truncated JSON string, then parse
+  if (!parsed && rawText.includes('{')) {
+    parsed = tryParse(repairTruncatedJSON(fromBrace))
   }
 
   if (!parsed) {
@@ -222,6 +229,46 @@ function extractAndValidateJSON(rawText) {
 /** JSON.parse wrapper that returns null instead of throwing on invalid input. */
 function tryParse(str) {
   try { return JSON.parse(str) } catch { return null }
+}
+
+/**
+ * Attempts to salvage a JSON string that was cut off mid-stream (e.g. because
+ * max_tokens was reached).  Works by walking the string character-by-character,
+ * tracking open brackets/braces and string state, then appending the missing
+ * closing characters in reverse stack order.
+ *
+ * This is a best-effort repair — it cannot recover lost note data, but it
+ * allows the compiler to work with whatever measures were fully written out
+ * before the response was truncated.
+ *
+ * @param {string} str  Potentially-truncated JSON string
+ * @returns {string}    The input with missing closing tokens appended
+ */
+function repairTruncatedJSON(str) {
+  let result = str.trim()
+
+  // Remove a trailing comma that would make the JSON invalid after we close it
+  result = result.replace(/,\s*$/, '')
+
+  // Walk the string tracking open structures and string literal state
+  const stack    = []
+  let inString   = false
+  let escape     = false
+
+  for (const ch of result) {
+    if (escape)                        { escape = false; continue }
+    if (ch === '\\' && inString)       { escape = true;  continue }
+    if (ch === '"')                    { inString = !inString; continue }
+    if (inString)                        continue
+    if      (ch === '{')               stack.push('}')
+    else if (ch === '[')               stack.push(']')
+    else if (ch === '}' || ch === ']') stack.pop()
+  }
+
+  // Close every open structure in LIFO order
+  while (stack.length) result += stack.pop()
+
+  return result
 }
 
 /**
