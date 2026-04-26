@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #ff69b4;
+  --dark: #0f0f0f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #0f0f0f;
+  color: #e0e0e0;
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  min-height: 100vh;
+  margin: 0;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+::-webkit-scrollbar-thumb {
+  background: #ff69b4;
+  border-radius: 3px;
+}
+
+/* CodeMirror overrides */
+.cm-editor {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 14px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+}
+
+.cm-editor.cm-focused {
+  outline: 1px solid #ff69b4 !important;
+}
+
+.cm-scroller {
+  max-height: 500px;
+  overflow: auto;
+}
+
+/* Drag-over highlight */
+.drag-over {
+  border-color: #ff69b4 !important;
+  background-color: rgba(255, 105, 180, 0.05) !important;
+}
+
+/* Spinner animation */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* Glitch/pulse for accent text */
+@keyframes pulse-pink {
+  0%, 100% { text-shadow: 0 0 8px #ff69b4, 0 0 20px #ff69b4; }
+  50% { text-shadow: 0 0 4px #ff69b4, 0 0 10px #ff69b4; }
+}
+
+.accent-glow {
+  color: #ff69b4;
+  animation: pulse-pink 2s ease-in-out infinite;
+}
