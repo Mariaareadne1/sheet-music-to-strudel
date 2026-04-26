@@ -4,7 +4,7 @@ import ProcessingScreen from './components/ProcessingScreen.jsx'
 import ResultsEditor    from './components/ResultsEditor.jsx'
 import HistoryDrawer    from './components/HistoryDrawer.jsx'
 import { pdfToImages }      from './lib/pdfToImages.js'
-import { callClaudeAPI }    from './lib/claudeApi.js'
+import { callClaudeAPI, validateCodeWithClaude } from './lib/claudeApi.js'
 import { compileToStrudel } from './lib/strudelCompiler.js'
 import { saveToHistory }    from './lib/history.js'
 import { createThumbnail }  from './lib/thumbnail.js'
@@ -79,10 +79,15 @@ export default function App() {
       await delay(120)
 
       setStatusMsg('Compiling Strudel pattern...')
-      setProgress(95)
-      const strudelCode = compileToStrudel(rawJson)
+      setProgress(93)
+      const rawCode = compileToStrudel(rawJson)
 
-      // ── 5. Save to history ────────────────────────────────────────────────
+      // ── 5. Claude syntax validation (fast Haiku second pass) ─────────────
+      setStatusMsg('Validating Strudel syntax...')
+      setProgress(96)
+      const strudelCode = await validateCodeWithClaude(rawCode)
+
+      // ── 6. Save to history ────────────────────────────────────────────────
       const thumb = (images.length > 0)
         ? await createThumbnail(images[0].base64, images[0].mediaType).catch(() => null)
         : null
