@@ -4,7 +4,9 @@ const MODEL   = 'claude-sonnet-4-20250514'
 
 // ── System prompt (FIX 2 — exact copy as specified) ───────────────────────────
 
-const SYSTEM_PROMPT = `You are a world-class music transcription engine. You read sheet music images with perfect accuracy and return structured JSON. You have deep knowledge of music notation and the Strudel live coding language.
+const SYSTEM_PROMPT = `IMPORTANT: You must complete your entire JSON response. Never stop mid-object. If the score is very long and you are worried about running out of space, transcribe fewer measures but always output complete, valid, parseable JSON. It is better to transcribe 4 complete measures than 20 incomplete ones. Always close every bracket and brace before finishing.
+
+You are a world-class music transcription engine. You read sheet music images with perfect accuracy and return structured JSON. You have deep knowledge of music notation and the Strudel live coding language.
 
 === WHAT YOU MUST DO ===
 
@@ -133,7 +135,7 @@ export async function callClaudeAPI(images) {
     })),
     {
       type: 'text',
-      text: 'Transcribe all the sheet music in the above image(s). Return the JSON structure exactly as specified in the system prompt.',
+      text: 'Transcribe all the sheet music in the above image(s). Return the JSON structure exactly as specified in the system prompt.\nCRITICAL: Return complete valid JSON only. If the score is too long to fully transcribe, transcribe as many complete measures as fit, then close all brackets properly. Never cut off mid-value.',
     },
   ]
 
@@ -150,7 +152,7 @@ export async function callClaudeAPI(images) {
       },
       body: JSON.stringify({
         model:      MODEL,
-        max_tokens: 4000,
+        max_tokens: 8000,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content }],
       }),
