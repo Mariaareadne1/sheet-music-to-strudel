@@ -1,4 +1,11 @@
 import { STRUDEL_SYNTAX_REFERENCE } from './strudelCompiler.js'
+import {
+  preprocessScore,
+  detectStaffLines,
+  detectBarlines,
+  cropMeasures,
+  findRecurringPatterns,
+} from './scoreAnalyzer.js'
 
 const API_KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY
 const API_URL    = 'https://api.anthropic.com/v1/messages'
@@ -117,22 +124,54 @@ ${STRUDEL_SYNTAX_REFERENCE}`
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Sends one or more page images to Claude and returns a validated music JSON.
- *
- * Each image in the array is { base64: string, mediaType: string }.
- * Throws a descriptive Error on network failure, HTTP error, or bad JSON.
+ * Full transcription pipeline:
+ *   1. detectKeyAndTime  — fast Haiku call to lock in key + time signature
+ *   2. scoreAnalyzer     — local Canvas-API visual pattern map
+ *   3. getScoreDescription — Haiku pass 1: verbal score structure
+ *   4. Main Sonnet call  — pass 2: full JSON with injected context
  *
  * @param {Array<{base64: string, mediaType: string}>} images
- * @returns {Promise<object>} Validated, normalised music JSON
+ * @param {function(number, string=): void} onProgress  — called with 0-100 + optional label
+ * @returns {Promise<{json: object, patternMap: object}>}
  */
-export async function callClaudeAPI(images) {
+export async function callClaudeAPI(images, onProgress = () => {}) {
   if (!API_KEY) {
     throw new Error(
       'Missing VITE_ANTHROPIC_API_KEY — copy .env.example to .env and add your key.'
     )
   }
 
-  // Build the message: one image block per page followed by a text instruction
+  // ── Step 1: Key/time pre-detection (fast Haiku call) ─────────────────────
+  const keyTimeInfo = await detectKeyAndTime(images)
+  onProgress(8, 'Detecting key signature...')
+
+  // ── Step 2: Visual pattern analysis (local Canvas API) ───────────────────
+  let patternMap = {}
+  try {
+    const scoreData  = await preprocessScore(images[0].base64, images[0].mediaType)
+    const staffLines = detectStaffLines(scoreData)
+    const barlines   = detectBarlines(scoreData, staffLines)
+    const crops      = cropMeasures(scoreData, staffLines, barlines)
+    patternMap       = await findRecurringPatterns(crops)
+  } catch (e) {
+    console.warn('[Sheet Music to Strudel] Score analysis skipped (non-fatal):', e.message)
+  }
+  onProgress(18, 'Mapping score structure...')
+
+  // ── Step 3: Pass 1 — verbal score description (Haiku) ────────────────────
+  const description = await getScoreDescription(images, keyTimeInfo)
+  onProgress(45, 'Reading score structure...')
+
+  // ── Step 4: Pass 2 — full JSON transcription (Sonnet) ────────────────────
+  const metaLines = [
+    keyTimeInfo ? `CONFIRMED SCORE METADATA: ${keyTimeInfo}` : '',
+    description ? `SCORE STRUCTURE SUMMARY: ${description}` : '',
+  ].filter(Boolean)
+
+  const systemPrompt = metaLines.length
+    ? `${metaLines.join('\n')}\n\n${SYSTEM_PROMPT}`
+    : SYSTEM_PROMPT
+
   const content = [
     ...images.map(({ base64, mediaType }) => ({
       type: 'image',
@@ -152,13 +191,12 @@ export async function callClaudeAPI(images) {
         'Content-Type':  'application/json',
         'x-api-key':     API_KEY,
         'anthropic-version': '2023-06-01',
-        // Required for direct browser → API calls without a backend proxy
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
         model:      MODEL,
         max_tokens: 8000,
-        system:     SYSTEM_PROMPT,
+        system:     systemPrompt,
         messages:   [{ role: 'user', content }],
       }),
     })
@@ -182,7 +220,75 @@ export async function callClaudeAPI(images) {
   const data    = await response.json()
   const rawText = data.content?.[0]?.text ?? ''
 
-  return extractAndValidateJSON(rawText)
+  onProgress(95, 'Finalizing transcription...')
+
+  const json = extractAndValidateJSON(rawText)
+  return { json, patternMap }
+}
+
+// ── Pre-detection helpers ─────────────────────────────────────────────────────
+
+/**
+ * Fast Haiku call: detects key signature and time signature from the first image.
+ * Returns a compact string like "Key: E major | Time: 4/4", or null on any failure.
+ */
+async function detectKeyAndTime(images) {
+  try {
+    const content = [
+      { type: 'image', source: { type: 'base64', media_type: images[0].mediaType, data: images[0].base64 } },
+      { type: 'text',  text: 'Look at this sheet music. Reply in one line only: "Key: [key] | Time: [N/N]". Example: "Key: E major | Time: 4/4". If key unknown write "Key: Unknown". Nothing else.' },
+    ]
+    const res = await fetch(API_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'x-api-key':     API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({ model: HAIKU_MODEL, max_tokens: 80, messages: [{ role: 'user', content }] }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return (data.content?.[0]?.text ?? '').trim() || null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Pass 1: Haiku call that returns a short verbal description of the score's
+ * structure.  Injected into the Sonnet system prompt as priming context.
+ */
+async function getScoreDescription(images, keyTimeInfo) {
+  try {
+    const hint = keyTimeInfo ? `Known metadata: ${keyTimeInfo}. ` : ''
+    const content = [
+      ...images.map(({ base64, mediaType }) => ({
+        type: 'image',
+        source: { type: 'base64', media_type: mediaType, data: base64 },
+      })),
+      {
+        type: 'text',
+        text: `${hint}In 2-3 sentences describe this sheet music's structure: number of measures, how many distinct sections or visually repeated passages, what clefs/voices are present, and any notable complexity (runs, chords, triplets). Be specific about repeated measure patterns.`,
+      },
+    ]
+    const res = await fetch(API_URL, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'x-api-key':     API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({ model: HAIKU_MODEL, max_tokens: 300, messages: [{ role: 'user', content }] }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return (data.content?.[0]?.text ?? '').trim() || null
+  } catch {
+    return null
+  }
 }
 
 // ── JSON extraction helpers ───────────────────────────────────────────────────

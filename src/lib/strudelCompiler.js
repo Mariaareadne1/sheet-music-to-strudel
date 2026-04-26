@@ -171,10 +171,11 @@ function getVoiceLabel(voiceName) {
  * Main export.  Accepts the validated JSON object from claudeApi.js and
  * returns a complete Strudel JavaScript source string.
  *
- * @param {object} json  Validated music JSON
- * @returns {string}     Strudel source code
+ * @param {object} json        Validated music JSON
+ * @param {object} patternMap  Visual pattern hints from scoreAnalyzer (reserved for future use)
+ * @returns {string}           Strudel source code
  */
-export function compileToStrudel(json) {
+export function compileToStrudel(json, patternMap = {}) {  // eslint-disable-line no-unused-vars
   const {
     bpm           = 120,
     timeSignature = [4, 4],
@@ -228,20 +229,93 @@ export function compileToStrudel(json) {
 
 /**
  * Builds direct $: pattern lines for a single section.
- * Returns an array of strings that form the code body.
+ *
+ * When any voice contains repeated measure strings, defines const pattern
+ * variables and emits arrange() with run-length-encoded counts instead of a
+ * flat note("...") string.  This produces shorter, more readable output for
+ * pieces with AABB or verse/chorus-style repetition.
  */
 function buildDirectPatterns(measures, voiceNames, beatScale) {
   const lines = []
+
+  // Pre-compute every measure string for every voice
+  const voiceMeasureStrs = {}
   for (const voice of voiceNames) {
-    const pattern = buildNotePattern(measures, voice, beatScale)
-    if (!pattern) continue
+    voiceMeasureStrs[voice] = measures.map(m =>
+      buildMeasureString(m[voice] ?? [], beatScale)
+    )
+  }
+
+  // Only use pattern variables when there are genuine repeats and enough measures
+  const hasRepeats = measures.length > 2 && voiceNames.some(voice => {
+    const strs = voiceMeasureStrs[voice]
+    return new Set(strs).size < strs.length
+  })
+
+  if (!hasRepeats) {
+    for (const voice of voiceNames) {
+      const pattern = buildNotePattern(measures, voice, beatScale)
+      if (!pattern) continue
+      lines.push(`// ${getVoiceLabel(voice)}`)
+      lines.push(`$: ${pattern}`)
+      lines.push(`  .sound("${getInstrument(voice)}")`)
+      lines.push(`  .room(0.3)`)
+      lines.push(``)
+    }
+    return lines
+  }
+
+  // Assign letter IDs (A, B, C…) to unique measure strings per voice
+  const voicePatternIds  = {}  // voice → string[] of IDs, one per measure
+  const voicePatternDefs = {}  // voice → Map<id, measureString>
+
+  for (const voice of voiceNames) {
+    const strs    = voiceMeasureStrs[voice]
+    const strToId = new Map()
+    const ids     = []
+    let nextCode  = 65 // 'A'
+
+    for (const s of strs) {
+      if (!strToId.has(s)) strToId.set(s, String.fromCharCode(nextCode++))
+      ids.push(strToId.get(s))
+    }
+    voicePatternIds[voice]  = ids
+    voicePatternDefs[voice] = new Map([...strToId.entries()].map(([s, id]) => [id, s]))
+  }
+
+  // Declare const variables
+  for (const voice of voiceNames) {
+    for (const [id, measureStr] of voicePatternDefs[voice]) {
+      lines.push(`const ${voice}_${id} = "[${measureStr}]"`)
+    }
+  }
+  lines.push(``)
+
+  // One arrange() call per voice using run-length-encoded pattern sequence
+  for (const voice of voiceNames) {
+    const rle   = runLengthEncode(voicePatternIds[voice])
+    const sound = getInstrument(voice)
     lines.push(`// ${getVoiceLabel(voice)}`)
-    lines.push(`$: ${pattern}`)
-    lines.push(`  .sound("${getInstrument(voice)}")`)
-    lines.push(`  .room(0.3)`)
+    lines.push(`$: arrange(`)
+    for (const [id, count] of rle) {
+      lines.push(`  [${count}, note(${voice}_${id}).sound("${sound}").room(0.3)],`)
+    }
+    lines.push(`)`)
     lines.push(``)
   }
+
   return lines
+}
+
+/** Run-length encodes an array into [[value, count], ...] pairs. */
+function runLengthEncode(arr) {
+  if (arr.length === 0) return []
+  const out = [[arr[0], 1]]
+  for (let i = 1; i < arr.length; i++) {
+    if (arr[i] === out[out.length - 1][0]) out[out.length - 1][1]++
+    else out.push([arr[i], 1])
+  }
+  return out
 }
 
 /**

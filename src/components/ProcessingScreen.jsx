@@ -10,18 +10,54 @@
  *                horizontal scan-line animation while Claude processes the image
  */
 export default function ProcessingScreen({ statusMsg, progress = 0, thumbnail }) {
-  // Named steps with the approximate progress value at which each becomes active
   const STEPS = [
-    { label: 'Preparing file',        threshold: 5  },
-    { label: 'Reading sheet music',   threshold: 32 },
-    { label: 'Identifying notes',     threshold: 85 },
-    { label: 'Compiling Strudel code',threshold: 92 },
+    { label: 'Detecting key signature',    threshold: 10  },
+    { label: 'Reading score structure',    threshold: 35  },
+    { label: 'Transcribing notes',         threshold: 65  },
+    { label: 'Compiling Strudel patterns', threshold: 85  },
+    { label: 'Validating syntax',          threshold: 100 },
   ]
 
   const activeIndex = STEPS.reduce((acc, step, i) => (progress >= step.threshold ? i : acc), 0)
 
   return (
     <div className="flex flex-col items-center gap-6 text-center w-full max-w-md px-4">
+
+      {/* ── Animated violinist character ──────────────────────────────────── */}
+      <svg
+        width="64"
+        height="80"
+        viewBox="0 0 64 80"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
+        <g className="violinist-glow">
+          {/* Body — bobs up/down at 1.2 s */}
+          <g className="violinist-body">
+            <circle cx="32" cy="14" r="9" fill="var(--accent)" opacity="0.9" />
+            <rect x="22" y="25" width="20" height="20" rx="4" fill="var(--accent)" opacity="0.8" />
+            {/* Left arm holding violin neck */}
+            <line x1="22" y1="31" x2="8"  y2="38" stroke="var(--accent)" strokeWidth="3.5" strokeLinecap="round" opacity="0.85" />
+            {/* Violin body */}
+            <ellipse cx="5" cy="44" rx="5" ry="9" fill="var(--surface-raised)" stroke="var(--accent)" strokeWidth="1.5" opacity="0.9" />
+            <line x1="5" y1="37" x2="5" y2="51" stroke="var(--text-dim)" strokeWidth="0.75" />
+            {/* Legs */}
+            <line x1="27" y1="45" x2="24" y2="66" stroke="var(--accent)" strokeWidth="3.5" strokeLinecap="round" opacity="0.8" />
+            <line x1="37" y1="45" x2="40" y2="66" stroke="var(--accent)" strokeWidth="3.5" strokeLinecap="round" opacity="0.8" />
+            {/* Feet */}
+            <line x1="24" y1="66" x2="18" y2="70" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" opacity="0.8" />
+            <line x1="40" y1="66" x2="46" y2="70" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" opacity="0.8" />
+          </g>
+          {/* Bow arm — strokes at 0.6 s */}
+          <g className="violinist-bow-arm">
+            <line x1="42" y1="31" x2="56" y2="38" stroke="var(--accent)" strokeWidth="3.5" strokeLinecap="round" opacity="0.85" />
+            {/* Bow stick */}
+            <line x1="51" y1="22" x2="60" y2="56" stroke="var(--text-secondary)" strokeWidth="1.5" strokeLinecap="round" opacity="0.9" />
+            {/* Bow hair */}
+            <line x1="53" y1="22" x2="62" y2="56" stroke="var(--text-dim)" strokeWidth="0.75" opacity="0.6" />
+          </g>
+        </g>
+      </svg>
 
       {/* ── Sheet music preview with scan-line overlay ─────────────────────── */}
       {thumbnail && (

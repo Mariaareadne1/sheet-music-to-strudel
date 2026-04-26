@@ -58,33 +58,33 @@ export default function App() {
         setStatusMsg('Reading image...')
         images = await fileToBase64Images(file)
       }
-      setProgress(20)
+      setProgress(12)
 
       // ── 2. Generate 160×100 thumbnail from the first page/image ──────────
       if (images.length > 0) {
         const thumb = await createThumbnail(images[0].base64, images[0].mediaType)
         setThumbnail(thumb)
       }
-      setProgress(28)
+      setProgress(16)
 
-      // ── 3. Call Claude API ────────────────────────────────────────────────
-      setStatusMsg('Reading sheet music...')
-      setProgress(32)
-      const rawJson = await callClaudeAPI(images)
+      // ── 3. Multi-step Claude pipeline (key detection → analysis → JSON) ───
+      setStatusMsg('Detecting key signature...')
+      const { json: rawJson, patternMap } = await callClaudeAPI(images, (p, msg) => {
+        if (msg) setStatusMsg(msg)
+        // Map internal 0-100 to progress bar range 16-85
+        setProgress(16 + Math.round(p * 0.69))
+      })
       setProgress(85)
 
       // ── 4. Compile to Strudel ─────────────────────────────────────────────
-      setStatusMsg('Identifying notes...')
-      setProgress(90)
-      await delay(120)
-
-      setStatusMsg('Compiling Strudel pattern...')
-      setProgress(93)
-      const rawCode = compileToStrudel(rawJson)
+      setStatusMsg('Compiling Strudel patterns...')
+      setProgress(88)
+      await delay(80)
+      const rawCode = compileToStrudel(rawJson, patternMap)
 
       // ── 5. Claude syntax validation (fast Haiku second pass) ─────────────
       setStatusMsg('Validating Strudel syntax...')
-      setProgress(96)
+      setProgress(93)
       const strudelCode = await validateCodeWithClaude(rawCode)
 
       // ── 6. Save to history ────────────────────────────────────────────────
