@@ -1,22 +1,31 @@
 /**
  * ProcessingScreen
  *
- * Shown while the file is being converted and the Claude API call is in flight.
+ * Shown while the file is being converted.
  *
  * Props:
  *   statusMsg  – current step label
  *   progress   – 0-100 integer driving the animated progress bar
- *   thumbnail  – base64 JPEG string (or null) shown as a preview with a
- *                horizontal scan-line animation while Claude processes the image
+ *   thumbnail  – base64 JPEG string (or null)
+ *   mode       – 'ai' (default) | 'xml'  controls step list and header colour
  */
-export default function ProcessingScreen({ statusMsg, progress = 0, thumbnail }) {
-  const STEPS = [
-    { label: 'Detecting key signature',    threshold: 10  },
-    { label: 'Reading score structure',    threshold: 35  },
-    { label: 'Transcribing notes',         threshold: 65  },
-    { label: 'Compiling Strudel patterns', threshold: 85  },
-    { label: 'Validating syntax',          threshold: 100 },
-  ]
+export default function ProcessingScreen({ statusMsg, progress = 0, thumbnail, mode = 'ai' }) {
+  const isXml = mode === 'xml'
+
+  const STEPS = isXml
+    ? [
+        { label: 'Reading MusicXML structure', threshold: 20  },
+        { label: 'Parsing notes and rhythms',  threshold: 50  },
+        { label: 'Compiling Strudel patterns', threshold: 80  },
+        { label: 'Validating syntax',          threshold: 100 },
+      ]
+    : [
+        { label: 'Detecting key signature',    threshold: 10  },
+        { label: 'Reading score structure',    threshold: 35  },
+        { label: 'Transcribing notes',         threshold: 65  },
+        { label: 'Compiling Strudel patterns', threshold: 85  },
+        { label: 'Validating syntax',          threshold: 100 },
+      ]
 
   const activeIndex = STEPS.reduce((acc, step, i) => (progress >= step.threshold ? i : acc), 0)
 
@@ -95,11 +104,17 @@ export default function ProcessingScreen({ statusMsg, progress = 0, thumbnail })
 
       {/* Current status label */}
       <div className="space-y-1">
-        <p className="font-mono text-base sm:text-lg" style={{ color: 'var(--accent)' }}>
-          {statusMsg || 'Processing...'}
+        <p
+          className="font-mono text-base sm:text-lg"
+          style={{ color: isXml ? '#4ade80' : 'var(--accent)' }}
+        >
+          {isXml ? '// Parsing MusicXML' : (statusMsg || 'Processing...')}
         </p>
         <p className="text-xs sm:text-sm font-mono" style={{ color: 'var(--text-dim)' }}>
-          Claude is reading your sheet music
+          {isXml
+            ? statusMsg || 'High-accuracy parse in progress...'
+            : 'Claude is reading your sheet music'
+          }
         </p>
       </div>
 

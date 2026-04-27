@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { javascript } from '@codemirror/lang-javascript'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -20,12 +20,23 @@ import InfoBadges from './InfoBadges.jsx'
  *   meta      – music metadata from Claude (for InfoBadges)
  *   theme     – 'dark' | 'light' (CodeMirror theme)
  *   thumbnail – base64 JPEG string or null
+ *   source    – 'ai' | 'musicxml'  (drives dismissible tip)
  *   onReset   – returns to upload screen
  */
-export default function ResultsEditor({ code, meta, theme, thumbnail, onReset }) {
-  const [editorCode, setEditorCode] = useState(code)
-  const [copied,     setCopied]     = useState(false)
+export default function ResultsEditor({ code, meta, theme, thumbnail, source = 'ai', onReset }) {
+  const [editorCode,  setEditorCode]  = useState(code)
+  const [copied,      setCopied]      = useState(false)
   const [showTooltip, setShowTooltip] = useState(false)
+  const [tipDismissed, setTipDismissed] = useState(
+    () => sessionStorage.getItem('xml_tip_dismissed') === '1'
+  )
+
+  const showXmlTip = source === 'ai' && !tipDismissed
+
+  function dismissTip() {
+    sessionStorage.setItem('xml_tip_dismissed', '1')
+    setTipDismissed(true)
+  }
 
   const onChange = useCallback(val => setEditorCode(val), [])
 
@@ -212,6 +223,31 @@ export default function ResultsEditor({ code, meta, theme, thumbnail, onReset })
       <p className="text-xs font-mono" style={{ color: 'var(--text-dim)' }}>
         // Editor is fully editable — tweak the code before opening in Strudel
       </p>
+
+      {/* ── Dismissible MusicXML tip (AI path only, once per session) ───────── */}
+      {showXmlTip && (
+        <div
+          className="flex items-start gap-3 rounded-lg px-4 py-3"
+          style={{
+            background:  'rgba(250, 204, 21, 0.07)',
+            border:      '1px solid rgba(250, 204, 21, 0.22)',
+          }}
+        >
+          <span className="flex-shrink-0 text-sm mt-0.5">💡</span>
+          <p className="flex-1 text-xs font-mono leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+            For better accuracy, try downloading the MusicXML version of this piece from{' '}
+            <span style={{ color: '#facc15' }}>musescore.com</span> and re-uploading it.
+          </p>
+          <button
+            onClick={dismissTip}
+            className="flex-shrink-0 text-xs font-mono leading-none"
+            style={{ color: 'var(--text-dim)', cursor: 'pointer' }}
+            aria-label="Dismiss tip"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   )
 }

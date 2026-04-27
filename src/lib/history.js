@@ -28,10 +28,11 @@ export function getHistory() {
  * Prepends a new entry to the history array and persists it.
  * Trims to MAX_ENTRIES if necessary.
  *
- * @param {{ title, bpm, timeSignature, key, code, thumbnail }} data
+ * @param {{ title, bpm, timeSignature, key, code, thumbnail, source }} data
+ *   source: 'musicxml' | 'ai'  — which conversion path was used
  * @returns {Array} The updated history array
  */
-export function saveToHistory({ title, bpm, timeSignature, key, code, thumbnail }) {
+export function saveToHistory({ title, bpm, timeSignature, key, code, thumbnail, source }) {
   const entry = {
     id:            Date.now(),
     title:         title         ?? 'Unknown',
@@ -40,6 +41,7 @@ export function saveToHistory({ title, bpm, timeSignature, key, code, thumbnail 
     key:           key           ?? '',
     code:          code          ?? '',
     thumbnail:     thumbnail     ?? null,
+    source:        source        ?? 'ai',
     timestamp:     new Date().toISOString(),
   }
 

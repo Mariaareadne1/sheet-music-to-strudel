@@ -133,10 +133,11 @@ export default function HistoryDrawer({ isOpen, onClose, onLoad }) {
  * Load / Delete action buttons.
  */
 function HistoryCard({ entry, onLoad, onDelete }) {
-  const { id, title, bpm, timeSignature, key, thumbnail, timestamp } = entry
+  const { id, title, bpm, timeSignature, key, thumbnail, timestamp, source } = entry
   const tsLabel = Array.isArray(timeSignature)
     ? `${timeSignature[0]}/${timeSignature[1]}`
     : '4/4'
+  const isXml = source === 'musicxml'
 
   return (
     <div
@@ -169,13 +170,26 @@ function HistoryCard({ entry, onLoad, onDelete }) {
       {/* Card body */}
       <div className="p-3 space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <p
-            className="font-mono text-xs font-semibold leading-tight truncate"
-            style={{ color: 'var(--text-primary)', maxWidth: '80%' }}
-            title={title}
-          >
-            {title || 'Unknown'}
-          </p>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p
+              className="font-mono text-xs font-semibold leading-tight truncate"
+              style={{ color: 'var(--text-primary)' }}
+              title={title}
+            >
+              {title || 'Unknown'}
+            </p>
+            {/* Source badge */}
+            <span
+              className="flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-bold font-mono"
+              style={isXml
+                ? { background: 'rgba(74, 222, 128, 0.15)', color: '#4ade80',  border: '1px solid rgba(74, 222, 128, 0.3)' }
+                : { background: 'rgba(250, 204, 21, 0.12)', color: '#facc15',  border: '1px solid rgba(250, 204, 21, 0.25)' }
+              }
+              title={isXml ? 'Parsed from MusicXML' : 'Transcribed by AI'}
+            >
+              {isXml ? 'XML' : 'AI'}
+            </span>
+          </div>
           {/* Delete button */}
           <button
             onClick={() => onDelete(id)}

@@ -8,6 +8,7 @@ import { callClaudeAPI, validateCodeWithClaude } from './lib/claudeApi.js'
 import { compileToStrudel } from './lib/strudelCompiler.js'
 import { saveToHistory }    from './lib/history.js'
 import { createThumbnail }  from './lib/thumbnail.js'
+import { parseMusicXml, isMusicXmlFile } from './lib/musicXmlParser.js'
 
 const STAGES = { UPLOAD: 'upload', PROCESSING: 'processing', RESULTS: 'results', ERROR: 'error' }
 
@@ -19,13 +20,14 @@ const STAGES = { UPLOAD: 'upload', PROCESSING: 'processing', RESULTS: 'results',
  * history, and the thumbnail generated from each uploaded file.
  */
 export default function App() {
-  const [stage,      setStage]     = useState(STAGES.UPLOAD)
-  const [statusMsg,  setStatusMsg] = useState('')
-  const [progress,   setProgress]  = useState(0)
-  const [result,     setResult]    = useState(null)
-  const [error,      setError]     = useState(null)
-  const [thumbnail,  setThumbnail] = useState(null)
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [stage,          setStage]         = useState(STAGES.UPLOAD)
+  const [statusMsg,      setStatusMsg]     = useState('')
+  const [progress,       setProgress]      = useState(0)
+  const [result,         setResult]        = useState(null)
+  const [error,          setError]         = useState(null)
+  const [thumbnail,      setThumbnail]     = useState(null)
+  const [historyOpen,    setHistoryOpen]   = useState(false)
+  const [processingMode, setProcessingMode] = useState('ai')  // 'ai' | 'xml'
 
   // Persist theme across page reloads
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? 'dark')
@@ -47,65 +49,104 @@ export default function App() {
     setThumbnail(null)
     setProgress(5)
 
+    const isXml = isMusicXmlFile(file)
+    setProcessingMode(isXml ? 'xml' : 'ai')
+
     try {
-      let images = []
+      if (isXml) {
+        // ── MusicXML path — no AI needed ─────────────────────────────────────
 
-      // ── 1. Convert file to images ─────────────────────────────────────────
-      if (file.type === 'application/pdf') {
-        setStatusMsg('Converting PDF pages...')
-        images = await pdfToImages(file)
+        setStatusMsg('Reading MusicXML structure...')
+        setProgress(20)
+        const rawJson = await parseMusicXml(file)
+
+        setStatusMsg('Parsing notes and rhythms...')
+        setProgress(50)
+        await delay(60)
+
+        setStatusMsg('Compiling Strudel patterns...')
+        setProgress(75)
+        const rawCode = compileToStrudel(rawJson, {})
+
+        setStatusMsg('Validating syntax...')
+        setProgress(88)
+        const strudelCode = await validateCodeWithClaude(rawCode)
+
+        saveToHistory({
+          title:         rawJson.title,
+          bpm:           rawJson.bpm,
+          timeSignature: rawJson.timeSignature,
+          key:           rawJson.key,
+          code:          strudelCode,
+          thumbnail:     null,
+          source:        'musicxml',
+        })
+
+        setProgress(100)
+        await delay(150)
+        setResult({ code: strudelCode, meta: rawJson, thumbnail: null, source: 'musicxml' })
+        setStage(STAGES.RESULTS)
+
       } else {
-        setStatusMsg('Reading image...')
-        images = await fileToBase64Images(file)
+        // ── AI vision path (PDF / image) ──────────────────────────────────────
+        let images = []
+
+        // 1. Convert file to images
+        if (file.type === 'application/pdf') {
+          setStatusMsg('Converting PDF pages...')
+          images = await pdfToImages(file)
+        } else {
+          setStatusMsg('Reading image...')
+          images = await fileToBase64Images(file)
+        }
+        setProgress(12)
+
+        // 2. Generate thumbnail
+        if (images.length > 0) {
+          const thumb = await createThumbnail(images[0].base64, images[0].mediaType)
+          setThumbnail(thumb)
+        }
+        setProgress(16)
+
+        // 3. Multi-step Claude pipeline
+        setStatusMsg('Detecting key signature...')
+        const { json: rawJson, patternMap } = await callClaudeAPI(images, (p, msg) => {
+          if (msg) setStatusMsg(msg)
+          setProgress(16 + Math.round(p * 0.69))
+        })
+        setProgress(85)
+
+        // 4. Compile
+        setStatusMsg('Compiling Strudel patterns...')
+        setProgress(88)
+        await delay(80)
+        const rawCode = compileToStrudel(rawJson, patternMap)
+
+        // 5. Validate
+        setStatusMsg('Validating Strudel syntax...')
+        setProgress(93)
+        const strudelCode = await validateCodeWithClaude(rawCode)
+
+        // 6. Save to history
+        const thumb = (images.length > 0)
+          ? await createThumbnail(images[0].base64, images[0].mediaType).catch(() => null)
+          : null
+
+        saveToHistory({
+          title:         rawJson.title,
+          bpm:           rawJson.bpm,
+          timeSignature: rawJson.timeSignature,
+          key:           rawJson.key,
+          code:          strudelCode,
+          thumbnail:     thumb,
+          source:        'ai',
+        })
+
+        setProgress(100)
+        await delay(150)
+        setResult({ code: strudelCode, meta: rawJson, thumbnail: thumb, source: 'ai' })
+        setStage(STAGES.RESULTS)
       }
-      setProgress(12)
-
-      // ── 2. Generate 160×100 thumbnail from the first page/image ──────────
-      if (images.length > 0) {
-        const thumb = await createThumbnail(images[0].base64, images[0].mediaType)
-        setThumbnail(thumb)
-      }
-      setProgress(16)
-
-      // ── 3. Multi-step Claude pipeline (key detection → analysis → JSON) ───
-      setStatusMsg('Detecting key signature...')
-      const { json: rawJson, patternMap } = await callClaudeAPI(images, (p, msg) => {
-        if (msg) setStatusMsg(msg)
-        // Map internal 0-100 to progress bar range 16-85
-        setProgress(16 + Math.round(p * 0.69))
-      })
-      setProgress(85)
-
-      // ── 4. Compile to Strudel ─────────────────────────────────────────────
-      setStatusMsg('Compiling Strudel patterns...')
-      setProgress(88)
-      await delay(80)
-      const rawCode = compileToStrudel(rawJson, patternMap)
-
-      // ── 5. Claude syntax validation (fast Haiku second pass) ─────────────
-      setStatusMsg('Validating Strudel syntax...')
-      setProgress(93)
-      const strudelCode = await validateCodeWithClaude(rawCode)
-
-      // ── 6. Save to history ────────────────────────────────────────────────
-      const thumb = (images.length > 0)
-        ? await createThumbnail(images[0].base64, images[0].mediaType).catch(() => null)
-        : null
-
-      saveToHistory({
-        title:         rawJson.title,
-        bpm:           rawJson.bpm,
-        timeSignature: rawJson.timeSignature,
-        key:           rawJson.key,
-        code:          strudelCode,
-        thumbnail:     thumb,
-      })
-
-      setProgress(100)
-      await delay(150)
-
-      setResult({ code: strudelCode, meta: rawJson, thumbnail: thumb })
-      setStage(STAGES.RESULTS)
     } catch (err) {
       console.error(err)
       setError(err.message || 'Something went wrong.')
@@ -121,6 +162,7 @@ export default function App() {
     setStatusMsg('')
     setProgress(0)
     setThumbnail(null)
+    setProcessingMode('ai')
   }
 
   /**
@@ -137,6 +179,7 @@ export default function App() {
         key:           entry.key,
       },
       thumbnail: entry.thumbnail,
+      source:    entry.source ?? 'ai',
     })
     setStage(STAGES.RESULTS)
   }
@@ -157,7 +200,12 @@ export default function App() {
           <UploadZone onFile={handleFile} />
         )}
         {stage === STAGES.PROCESSING && (
-          <ProcessingScreen statusMsg={statusMsg} progress={progress} thumbnail={thumbnail} />
+          <ProcessingScreen
+            statusMsg={statusMsg}
+            progress={progress}
+            thumbnail={thumbnail}
+            mode={processingMode}
+          />
         )}
         {stage === STAGES.RESULTS && result && (
           <ResultsEditor
@@ -165,6 +213,7 @@ export default function App() {
             meta={result.meta}
             theme={theme}
             thumbnail={result.thumbnail}
+            source={result.source ?? 'ai'}
             onReset={handleReset}
           />
         )}
