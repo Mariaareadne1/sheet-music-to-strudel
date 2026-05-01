@@ -179,6 +179,276 @@ function measureToPatternString(measure, beatsPerMeasure) {
   return result
 }
 
+// ── STRUDEL_CONDENSING_RULES — complete notation equivalence reference ─────────
+//
+// This constant is the knowledge base driving condenseMeasure and
+// mergeArrangeEntries.  Every group of examples produces identical output;
+// the LAST option in each group is the most concise form.
+
+const STRUDEL_CONDENSING_RULES = `
+============================================================
+STRUDEL NOTATION EQUIVALENTS — COMPLETE REFERENCE
+Every group below produces IDENTICAL output.
+The LAST option in each group is the MOST CONCISE.
+============================================================
+
+── SECTION 1: SEQUENCE REPETITION ──────────────────────────
+
+// Repeating a single note N times:
+note("c4 c4 c4 c4")           // verbose
+note("c4!4")                   // CONCISE — ! means replicate
+
+note("c4 c4 c4")               // verbose
+note("c4!3")                   // CONCISE
+
+note("bd bd")                  // verbose
+note("bd!2")                   // CONCISE
+
+// Repeating a group N times:
+note("c4 e4 c4 e4 c4 e4")     // verbose
+note("[c4 e4]!3")              // CONCISE
+
+sound("bd hh bd hh bd hh bd hh")  // verbose
+sound("[bd hh]!4")                 // CONCISE
+
+── SECTION 2: SPEED MULTIPLICATION ─────────────────────────
+
+// Playing a pattern N times per cycle:
+sound("bd sd bd sd")           // plays twice per cycle already
+sound("bd sd")*2               // CONCISE — same output
+
+sound("hh hh hh hh hh hh hh hh")  // 8 hihats verbose
+sound("hh")*8                       // CONCISE
+sound("hh*8")                        // ALSO CONCISE — inside mini-notation
+
+sound("bd sd bd sd bd sd bd sd")   // verbose
+sound("bd sd")*4                    // CONCISE
+
+// Inside mini-notation * means speed up that element:
+sound("bd hh*2 sd hh*2")      // hh plays twice as fast = 2 hits per beat slot
+// same as:
+sound("bd [hh hh] sd [hh hh]")  // verbose version
+
+── SECTION 3: SLOWING DOWN / ────────────────────────────────
+
+// Playing a pattern over multiple cycles:
+note("[c4 e4 g4 b4]")/2       // takes 2 cycles to complete
+note("<c4 e4>")               // ALSO takes 2 cycles — alternate syntax
+
+note("[c4 e4 g4 b4 d5 f5]")/3  // takes 3 cycles
+note("<c4 e4 g4>")              // same — alternates one per cycle
+
+// The angle bracket shorthand:
+note("<a b>")    === note("[a b]/2")    // plays a on cycle 1, b on cycle 2
+note("<a b c>")  === note("[a b c]/3")  // one per cycle
+note("<a b c d>") === note("[a b c d]/4")
+
+── SECTION 4: PITCH — LETTER VS NUMBER VS SCALE ─────────────
+
+// These all play the same C major scale:
+note("c4 d4 e4 f4 g4 a4 b4")                    // explicit letters
+note("48 50 52 53 55 57 59")                      // MIDI numbers
+n("0 1 2 3 4 5 6").scale("C4:major")             // scale degrees
+
+// D major scale starting on D4:
+note("d4 e4 f#4 g4 a4 b4 c#5")
+n("0 1 2 3 4 5 6").scale("D4:major")             // CONCISE
+
+// C minor:
+note("c4 d4 eb4 f4 g4 ab4 bb4")
+n("0 1 2 3 4 5 6").scale("C4:minor")             // CONCISE
+
+// Single note in a scale — transposing:
+note("c4").add(7)              // adds 7 semitones = G4
+note("g4")                    // same thing, verbose
+
+// Chord by name vs explicit notes:
+note("c4 e4 g4")              // C major chord spelled out
+note("[c4,e4,g4]")            // chord notation — simultaneous
+
+── SECTION 5: RESTS ─────────────────────────────────────────
+
+// Rest notations — all identical:
+note("~")                     // standard rest
+note("-")                     // also valid rest in sound() patterns
+
+// Half rest:
+note("~@2")                   // rest lasting 2 beats
+
+// Whole rest:
+note("~@4")                   // rest lasting 4 beats
+
+// Rest in a sequence:
+note("c4 ~ e4 ~")            // notes on beats 1 and 3
+note("c4 - e4 -")            // same with dash notation
+
+── SECTION 6: DURATION / ELONGATION ─────────────────────────
+
+// Whole note:
+note("c4@4")                  // explicit weight
+note("[c4]/1")*0.25           // never do this — use @4
+
+// Half note:
+note("c4@2 e4")               // c4 is twice as long as e4
+
+// Dotted quarter (1.5 beats):
+note("c4@1.5 d4")
+
+// Two eighth notes = one beat:
+note("[c4 d4]")               // sub-sequence — both share one beat slot
+
+// Four sixteenth notes = one beat:
+note("[[c4 d4 e4 f4]]")       // double bracket
+
+// Eight 32nd notes = one beat:
+note("[[[c4 d4 e4 f4 g4 a4 b4 c5]]]")  // triple bracket
+
+// Triplets:
+note("[c4 e4 g4]")            // 3 notes sharing 1 beat = eighth triplet
+note("[c4 e4 g4]@2")          // 3 notes sharing 2 beats = quarter triplet
+
+── SECTION 7: PARALLEL / SIMULTANEOUS PATTERNS ──────────────
+
+// These all play two patterns at the same time:
+stack(note("c4 e4"), note("g4 b4"))          // explicit stack
+note("c4 e4, g4 b4")                          // comma inside string
+
+// Multiple $: patterns:
+$: note("c4 e4").sound("piano")
+$: note("g4 b4").sound("bass")
+// same as:
+stack(
+  note("c4 e4").sound("piano"),
+  note("g4 b4").sound("bass")
+)
+
+── SECTION 8: ALTERNATING PATTERNS ──────────────────────────
+
+// Alternate between values each cycle:
+note("c4 <e4 g4>")           // beat 1 always c4, beat 2 alternates e4/g4
+
+// Classic drum pattern — verbose vs concise:
+sound("bd hh sd hh bd hh sd hh")   // 8 events verbose
+sound("bd hh sd hh")*2              // CONCISE — repeat twice
+
+// Alternating kick patterns:
+sound("<bd cp> hh")          // alternates bd and cp on beat 1 each cycle
+
+// Alternating whole measures:
+note("<[c4 e4 g4] [d4 f4 a4]>")   // measure 1 = C chord, measure 2 = D chord
+
+── SECTION 9: SUB-SEQUENCES ─────────────────────────────────
+
+// Playing 2 notes in the space of 1:
+note("[c4 e4] g4")           // [c4 e4] = two eighth notes in one beat
+
+// Equivalent ways to write a beat with subdivision:
+sound("bd [hh hh] sd [hh hh]")   // standard
+sound("bd hh*2 sd hh*2")          // CONCISE — * inside mini-notation
+
+// Nested subdivision:
+sound("bd [[hh oh] hh] sd hh")   // hh and oh share first half of beat 2
+
+── SECTION 10: PARALLEL INSIDE MINI-NOTATION ────────────────
+
+// Comma creates parallel tracks inside one sound() call:
+sound("bd hh, cp")           // bd+hh sequence AND cp playing together
+sound("hh hh hh hh, bd ~ bd ~")  // hihat pattern + kick pattern layered
+
+// Same as:
+stack(sound("bd hh"), sound("cp"))
+
+── SECTION 11: ARRANGEMENT — SECTION REPETITION ─────────────
+
+// Playing a section N times:
+arrange(
+  [1, sectionA],
+  [1, sectionA],
+  [1, sectionA],
+  [1, sectionB]
+)
+// CONCISE version:
+arrange(
+  [3, sectionA],   // 3 means play for 3 cycles
+  [1, sectionB]
+)
+
+── SECTION 12: STRUCTURE — LONG MELODIES ────────────────────
+
+// A melody that takes 4 cycles to play through:
+note("<[c4 e4 g4 b4] [d4 f4 a4 c5] [e4 g4 b4 d5] [f4 a4 c5 e5]>/4")
+// same as writing 4 separate patterns and using arrange([1,A],[1,B],[1,C],[1,D])
+
+// Single measure repeated 4 times:
+note("<[c4 e4 g4 b4]>/1")   // one measure, plays every cycle
+// if used in arrange([4, ...]) it plays 4 cycles
+
+── SECTION 13: DRUM PATTERN EQUIVALENTS ─────────────────────
+
+// Standard 4/4 rock beat — multiple equivalent forms:
+sound("bd ~ sd ~ bd ~ sd ~")                    // explicit
+sound("bd - sd - bd - sd -")                    // with dashes
+sound("[bd ~ sd ~]!2")                           // using replication
+sound("bd ~ sd ~")*2                             // using *
+
+// 8th note hihat:
+sound("hh hh hh hh hh hh hh hh")               // verbose
+sound("hh!8")                                    // CONCISE
+sound("hh*8")                                    // ALSO CONCISE
+sound("hh")*8                                    // function form
+
+// Classic house beat:
+sound("bd*4, ~ cp ~ cp, hh*8")                  // CONCISE layered
+// same as:
+stack(
+  sound("bd*4"),
+  sound("~ cp ~ cp"),
+  sound("hh*8")
+)
+
+── SECTION 14: NOTE FUNCTION EQUIVALENTS ────────────────────
+
+// note() and n() with .sound():
+note("c4 e4 g4").sound("piano")
+n("0 4 7").scale("C4:major").sound("piano")     // scale degree version
+
+// s() is shorthand for sound():
+s("bd sd hh")
+sound("bd sd hh")                               // same thing
+
+// note() with number = MIDI:
+note("60 64 67")                                // C4 E4 G4 as MIDI
+note("c4 e4 g4")                               // same, letter form
+
+── SECTION 15: EFFECT SHORTHANDS ────────────────────────────
+
+// These pairs are identical:
+.sound("x")    ===   .s("x")
+.delay(0.5).delaytime(0.25).delayfeedback(0.3)
+  ===  .delay(0.5).dt(0.25).dfb(0.3)           // shorthand params
+
+// room and size:
+.room(0.5)                                      // reverb
+.room(0.5).roomsize(2)                          // with room size
+
+============================================================
+HOW TO APPLY THESE RULES IN THE COMPILER:
+
+When building a measure string, after computing all tokens, run through
+these checks IN ORDER from most impactful to least:
+
+1. Check for N consecutive identical tokens → replace with token!N
+2. Check for identical bracket groups repeating → replace with [group]!N
+3. Check for a pattern that repeats to fill the measure → use *N
+4. Check if all notes are in a known scale → offer n().scale() form
+5. Check arrange() entries for consecutive identical refs → merge to [N, ref]
+6. Check if all notes are the same → collapse to note!count
+
+NEVER sacrifice correctness for conciseness.
+If unsure whether two forms are equivalent, use the explicit form.
+============================================================
+`
+
 // ── Step 6 — condense repeated tokens within a measure ───────────────────────
 
 // Splits a measure string into top-level tokens, respecting bracket nesting.
@@ -203,31 +473,55 @@ function tokenizeMeasure(str) {
   return tokens
 }
 
-// Applies Rules 2 & 3: compress consecutive identical tokens.
-// Simple note tokens use !N; bracket group tokens use *N.
-function condenseMeasure(str) {
-  const tokens = tokenizeMeasure(str)
-  if (tokens.length <= 1) return str
+// True when a token's leading word is a percussion sound name (Section 13).
+function isPercussionToken(token) {
+  const core = token.replace(/[\[\]]/g, '').split(/[\s@!*]/)[0]
+  return /^(bd|sd|hh|oh|cp|rim|kick|snare|hat|crash)$/i.test(core)
+}
 
+// Compresses a token array following STRUDEL_CONDENSING_RULES priority order:
+//
+//  Rule 3 (whole-measure fill, bracket group) → token*N   e.g. [c4 e4]*4
+//  Rule 5 (whole-measure fill, percussion)    → token*N   e.g. hh*8
+//  Rule 3 (whole-measure fill, simple note)   → token!N   e.g. c4!4  (prefer !)
+//  Rules 1 & 2 (partial consecutive runs)     → token!N   e.g. c4!3 e4
+function applyReplication(tokens) {
+  if (tokens.length === 0) return ''
+  if (tokens.length === 1) return tokens[0]
+
+  // Whole-measure: every slot is the same token
+  if (tokens.every(t => t === tokens[0])) {
+    const token = tokens[0]
+    const n = tokens.length
+    const isBracket = token.startsWith('[')
+    const isPerc    = isPercussionToken(token)
+    return (isBracket || isPerc) ? `${token}*${n}` : `${token}!${n}`
+  }
+
+  // Partial runs: collapse consecutive identical tokens with !N (Rules 1 & 2)
   const result = []
   let i = 0
   while (i < tokens.length) {
     const token = tokens[i]
     let count = 1
     while (i + count < tokens.length && tokens[i + count] === token) count++
-
-    if (count > 1) {
-      const isBracketGroup = token.startsWith('[')
-      result.push(isBracketGroup ? `${token}*${count}` : `${token}!${count}`)
-    } else {
-      result.push(token)
-    }
+    result.push(count > 1 ? `${token}!${count}` : token)
     i += count
   }
   return result.join(' ')
 }
 
-// ── Step 7 — merge consecutive identical arrange() entries (Rules 1 & 5) ─────
+function condenseMeasure(str) {
+  const tokens = tokenizeMeasure(str)
+  if (tokens.length <= 1) return str
+  return applyReplication(tokens)
+}
+
+// ── Step 7 — merge consecutive identical arrange() entries (Rule 4) ───────────
+//
+// Implements Section 11 of STRUDEL_CONDENSING_RULES:
+//   [1,A],[1,A],[1,A],[1,B]  →  [3,A],[1,B]
+//   [2,A],[1,A]              →  [3,A]   (counts sum across adjacent identical labels)
 
 function mergeArrangeEntries(labels) {
   if (labels.length === 0) return []
