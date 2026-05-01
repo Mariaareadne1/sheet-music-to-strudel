@@ -447,6 +447,286 @@ these checks IN ORDER from most impactful to least:
 NEVER sacrifice correctness for conciseness.
 If unsure whether two forms are equivalent, use the explicit form.
 ============================================================
+
+── SECTION 26: RANDOM CHOICE & WEIGHTED SELECTION ──────────────
+
+// | pipe = equal random choice each cycle:
+note("c4 | e4 | g4")           // randomly picks one each cycle
+chooseCycles("c4","e4","g4").note()  // same thing, function form
+// alias: randcat
+
+// Weighted random — give probabilities:
+wchooseCycles(["c4",5],["e4",3],["g4",1]).note()
+// c4 plays 5/9 of the time, e4 plays 3/9, g4 plays 1/9
+
+// choose() for continuous random selection:
+note("c2 g2 d2").s(choose("sine","triangle","sawtooth"))
+// each note gets a randomly chosen instrument
+
+// wchoose() with weights:
+note("c2 g2").s(wchoose(["piano",10],["violin",1]))
+
+── SECTION 27: PROBABILITY & DEGRADATION ───────────────────────
+
+// Remove events randomly:
+s("hh*8").degradeBy(0.2)       // 20% chance each hh is removed
+s("[hh?0.2]*8")                 // same in mini-notation
+s("hh*8").degrade()            // 50% removal — same as degradeBy(0.5)
+s("[hh?]*8")                    // same in mini-notation
+
+// Inverse — keep only the removed ones:
+s("hh*8").undegradeBy(0.2)     // keep the 20% that degrade removed
+
+// Split a pattern into degraded and undegraded halves:
+s("hh*10").layer(
+  x => x.degradeBy(0.5).pan(0),    // random half goes left
+  x => x.undegradeBy(0.5).pan(1)   // other half goes right
+)
+
+── SECTION 28: PROBABILITY FUNCTION APPLICATION ────────────────
+
+// Apply a function with a given probability:
+s("hh*8").sometimesBy(0.4, x=>x.speed(0.5))  // 40% of the time
+s("hh*8").sometimes(x=>x.speed(0.5))           // 50% of the time
+s("hh*8").often(x=>x.speed(0.5))               // 75% of the time
+s("hh*8").rarely(x=>x.speed(0.5))              // 25% of the time
+s("hh*8").almostAlways(x=>x.speed(0.5))        // 90% of the time
+s("hh*8").almostNever(x=>x.speed(0.5))         // 10% of the time
+s("hh*8").always(x=>x.speed(0.5))              // 100% — same as no condition
+s("hh*8").never(x=>x.speed(0.5))               // 0% — does nothing
+
+// Per-cycle probability (whole cycle changes at once):
+s("bd,hh*8").someCyclesBy(0.3, x=>x.speed(0.5))
+s("bd,hh*8").someCycles(x=>x.speed(0.5))       // 50% of cycles
+
+── SECTION 29: LAYERING & SUPERIMPOSITION ──────────────────────
+
+// superimpose — layer a transformed copy ON TOP of original:
+note("c3 eb3 g3").superimpose(x=>x.add(7))
+// plays original AND a version transposed up 7 semitones simultaneously
+
+// layer — like superimpose but WITHOUT the original:
+note("c3 eb3 g3").layer(x=>x.add("0,7"))
+// alias: apply
+
+// off — offset copy layered on top:
+note("c3 eb3 g3").off(1/8, x=>x.add(7))
+// plays a copy delayed by 1/8 cycle, transposed up 7 semitones
+// Great for creating harmonies and countermelodies
+
+// echo — repeated echoes with decreasing volume:
+s("bd sd").echo(3, 1/6, 0.8)
+// plays 3 times, each 1/6 cycle apart, each 80% volume of previous
+
+// echoWith — echo with custom transform each time:
+note("<0 [2 4]>").echoWith(4, 1/8, (p,n) => p.add(n*2))
+  .scale("C:minor")
+// each echo adds 2 more semitones than the last
+
+── SECTION 30: RHYTHM STRUCTURE TOOLS ──────────────────────────
+
+// struct — apply a rhythmic structure to a pattern:
+note("c,eb,g").struct("x ~ x ~ ~ x ~ x ~ ~ ~ x ~ x ~ ~").slow(2)
+// the note chord plays only where x appears in the structure
+
+// mask — silence by pattern (1=play, 0=silence):
+note("c [eb,g] d [eb,g]").mask("<1 [0 1]>")
+// every other cycle, first beat is silenced
+
+// hush — silence a whole pattern:
+stack(s("bd").hush(), s("hh*3"))
+// useful for muting layers
+
+// arp — arpeggiate stacked chord notes by index pattern:
+note("<[c,eb,g]!2 [c,f,ab] [d,f,ab]>").arp("0 [0,2] 1 [0,2]")
+// picks individual notes from chords by position
+
+── SECTION 31: CONDITIONAL TRANSFORMATION ──────────────────────
+
+// when — apply function when pattern is truthy:
+note("c3 eb3 g3").when("<0 1>/2", x=>x.sub(5))
+// every other cycle, transpose down 5 semitones
+
+// firstOf — apply every N cycles, on cycle 1:
+note("c3 d3 e3 g3").firstOf(4, x=>x.rev())
+// reverses on the first of every 4 cycles
+
+// lastOf — apply every N cycles, on the last cycle:
+note("c3 d3 e3 g3").lastOf(4, x=>x.rev())
+// reverses on the last of every 4 cycles
+
+// chunk — cycle through subdivisions applying function:
+note("0 1 2 3").chunk(4, x=>x.add(7)).scale("A:minor")
+// each cycle applies the function to a different quarter of the pattern
+
+// chunkBack — same but in reverse order:
+note("0 1 2 3").chunkBack(4, x=>x.add(7)).scale("A:minor")
+
+── SECTION 32: PICK & INHABIT — PATTERN SELECTION ─────────────
+
+// pick — select patterns by index:
+note("<0 1 2!2 3>".pick(["g a","e f","f g f g","g c d"]))
+sound("<0 1 [2,0]>".pick(["bd sd","cp cp","hh hh"]))
+
+// inhabit — pick patterns but squeeze them into target structure:
+let a = s("bd(3,8)")
+let b = s("cp sd")
+"<a b [a,b]>".inhabit({a, b})
+// named pattern selection — very powerful for song structure
+
+// pickRestart — picks AND restarts chosen pattern from beginning:
+"<a@2 b@2 c@2 d@2>".pickRestart({
+  a: n("0 1 2 0"),
+  b: n("2 3 4 ~"),
+  c: n("[4 5] [4 3] 2 0"),
+  d: n("0 -3 0 ~")
+}).scale("C:major").s("piano")
+
+── SECTION 33: SIGNALS — CONTINUOUS MODULATION ─────────────────
+
+// Signals are continuous streams of numbers for effects:
+// Range 0 to 1: saw, sine, cosine, tri, square, rand, perlin
+// Range -1 to 1: saw2, sine2, cosine2, tri2, square2, rand2
+
+// Use signals for organic, moving effects:
+s("hh*16").gain(sine)                    // volume breathes
+s("hh*16").pan(sine)                     // pans left/right
+note("c4 e4").lpf(saw.range(200,2000))   // filter sweeps up
+note("c4 e4").lpf(sine.range(200,2000).slow(4))  // slow filter wobble
+
+// irand — random integers:
+n(irand(8)).struct("x x*2 x x*3").scale("C:minor")
+// random scale degrees, with rhythmic structure applied
+
+// brand — binary random (0 or 1):
+s("hh*10").pan(brand)      // randomly pans each hit left or right
+s("hh*10").pan(brandBy(0.2))  // 20% chance of right pan
+
+// Mouse control (live performance):
+n(mouseX.segment(4).range(0,7)).scale("C:minor")  // mouse x = pitch
+n(mouseY.segment(4).range(0,7)).scale("C:minor")  // mouse y = pitch
+
+── SECTION 34: STEPWISE FUNCTIONS (experimental) ───────────────
+
+// stepcat — concatenate proportionally by step count:
+stepcat([3,"e3"],[1,"g3"]).note()   === note("e3@3 g3")
+stepcat("bd sd cp","hh hh").sound() === sound("bd sd cp hh hh")
+// alias: timecat, timeCat
+
+// pace — set steps per cycle:
+sound("bd sd cp").pace(4)
+=== sound("{bd sd cp}%4")
+=== sound("<bd sd cp>*4")
+
+// polymeter — align steps creating phase shifting:
+polymeter("c eb g","c2 g2").note()
+=== note("{c eb g, c2 g2}%6")
+// patterns repeat until LCM fits — creates rotation over time
+
+// expand / contract — stretch/compress step sizes:
+sound("tha dhi thom nam").expand("3 2 1").pace(8)
+// steps get longer then shorter each cycle
+
+// extend — increase density AND step count:
+stepcat(sound("bd bd - cp").extend(2), sound("bd - sd -")).pace(8)
+
+// take / drop — cut steps from pattern:
+note("bd cp ht mt").take("2")  === note("bd cp")  // first 2 steps
+note("bd cp ht mt").drop("1")                     // drop first step
+
+// grow / shrink — progressively reveal/hide pattern:
+note("c d e f").grow("1").sound("piano").pace(4)
+// cycle 1: c, cycle 2: c d, cycle 3: c d e, cycle 4: c d e f
+
+note("c d e f").shrink("1").sound("piano").pace(4)
+// opposite — starts full, removes one step each cycle
+
+── SECTION 35: COMPOSITION PATTERNS (how real songs are built) ──
+
+// PATTERN 1 — Theme and variation:
+const theme = note("c4 e4 g4 e4").sound("piano")
+theme                              // original
+theme.superimpose(x=>x.add(7))    // with harmony
+theme.rev()                        // reversed
+theme.fast(2)                      // double time
+theme.lastOf(4, x=>x.rev())        // occasional reverse
+
+// PATTERN 2 — Building tension with degradeBy:
+// Start sparse, get denser each section:
+s("hh*8").degradeBy(0.8)   // very sparse hihat
+s("hh*8").degradeBy(0.4)   // getting denser
+s("hh*8").degradeBy(0.0)   // full hihat
+
+// PATTERN 3 — Call and response with firstOf/lastOf:
+note("c4 e4 g4 ~").firstOf(2, x=>x.add(5))
+// plays c4 e4 g4 ~ then f4 a4 c5 ~ alternating
+
+// PATTERN 4 — Polyrhythm with $: patterns:
+$: s("bd*3").slow(2)         // 3 against 4
+$: s("sd*4")                 // 4 beats
+$: s("hh*5").slow(2)         // 5 against 4
+
+// PATTERN 5 — Chord progression with rootNotes bass:
+const chords = chord("<C Am F G>*2")
+$: chords.voicing().s("piano").room(0.3)
+$: chords.rootNotes(2).note().s("gm_acoustic_bass")
+
+// PATTERN 6 — Melodic sequence over chord changes:
+n("0 1 2 3 4 3 2 1")
+  .scale("<C:major A:minor F:major G:major>/4")
+  .sound("piano")
+// scale changes every 4 cycles following chord progression
+
+// PATTERN 7 — Euclidean polyrhythm drum kit:
+$: s("bd(3,8), sd(2,8), hh(7,8), cp(1,8,4)").bank("RolandTR909")
+
+// PATTERN 8 — Echo/delay for texture:
+note("c3 eb3 g3").off(1/8, x=>x.add(7)).off(1/4, x=>x.add(12))
+// three layers: original, harmony 1/8 late, octave 1/4 late
+
+// PATTERN 9 — Chunk for evolving melody:
+note("0 1 2 3 4 5 6 7").scale("C:minor")
+  .chunk(4, x=>x.add(7))
+// each quarter of the scale gets transposed in turn
+
+// PATTERN 10 — Signal-driven generative music:
+n(irand(8).segment(8))
+  .scale("C:pentatonic")
+  .sound("piano")
+  .room(perlin.range(0.2, 0.8))
+  .gain(sine.range(0.4, 0.9).slow(4))
+// random pentatonic notes, organic reverb and volume
+
+── SECTION 36: PERFORMANCE TECHNIQUES ──────────────────────────
+
+// .hush() to mute a layer live
+// commenting out $: lines to remove layers
+// .mask("<1 0>") to create drops
+// .degradeBy(x) sweep from 0 to 1 to thin out
+// .room(x) sweep from 0 to 1 for build-up
+// .gain(sine.slow(8)) for slow volume breathing
+// .lpf(saw.range(200,4000).slow(4)) for filter sweeps
+// .fast(2) / .slow(2) for half/double time effects
+// .rev() for sudden pattern reversal
+// .jux(rev) for stereo widening
+// .echo(3,1/8,0.7) for instant depth
+
+================================================================
+COMPOSITION ASSISTANCE RULES:
+When generating Strudel code for creative/composition purposes
+(not just transcription), prefer:
+
+1. Use chord() + voicing() for harmonic content over explicit notes
+2. Use n().scale() for melodic lines over explicit note names
+3. Use Euclidean rhythms (k,n) for percussion
+4. Add .off() or .superimpose() for automatic harmonization
+5. Add signals (sine, perlin) to effects for organic movement
+6. Use firstOf/lastOf for variation without rewriting patterns
+7. Use echo() for instant depth and space
+8. Use chunk() to create evolving, self-transforming melodies
+9. Use degradeBy patterns for tension/release arcs
+10. Use polymeter() for rhythmic interest and phase shifting
+================================================================
 `
 
 // ── Step 6 — condense repeated tokens within a measure ───────────────────────

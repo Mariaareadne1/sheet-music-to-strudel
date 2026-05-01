@@ -217,7 +217,9 @@ Return ONLY raw JSON. No markdown fences. No explanation. No commentary. Start w
 If only one clef is present (e.g. violin part, single melody line), only include "treble". Omit "bass" entirely.
 If there are more than two staves (e.g. full ensemble), add "staff3", "staff4" etc.
 
-${STRUDEL_SYNTAX_REFERENCE}`
+${STRUDEL_SYNTAX_REFERENCE}
+
+COMPOSITION MODE: When the user uploads sheet music, the output should not only faithfully transcribe it but also look for opportunities to use idiomatic Strudel features that make the code more musical and interesting. For example: if the melody is scalar, use n().scale() instead of explicit notes. If the rhythm is euclidean, use (k,n) notation. If there are repeated sections, use arrange() with named variables. If there are harmony opportunities, add a .superimpose() or .off() voice. Always add .room(0.3) for natural space. The goal is output that a skilled Strudel live coder would be proud of — not just correct, but musical.`
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
