@@ -179,32 +179,71 @@ function measureToPatternString(measure, beatsPerMeasure) {
   return result
 }
 
-// ── Step 6 — all measures for one voice → note() pattern string ──────────────
+// ── Step 6 — condense repeated tokens within a measure ───────────────────────
 
-// eslint-disable-next-line no-unused-vars
-function voiceToNotePattern(measureStrings) {
-  const N = measureStrings.length
-  if (N === 0) return null
-  if (N === 1) return `"<[${measureStrings[0]}]>/1"`
-  return `"<${measureStrings.map(m => '[' + m + ']').join(' ')}>/${N}"`
-}
-
-// ── Step 7 — detect exact-string repeats, assign variable names ──────────────
-
-function findRepeats(measureStrings) {
-  const seen   = {}
-  const labels = []
-
-  for (const str of measureStrings) {
-    if (!seen[str]) seen[str] = 'pattern_' + Object.keys(seen).length
-    labels.push(seen[str])
+// Splits a measure string into top-level tokens, respecting bracket nesting.
+function tokenizeMeasure(str) {
+  const tokens = []
+  let depth = 0
+  let current = ''
+  for (const ch of str) {
+    if (ch === '[') {
+      depth++
+      current += ch
+    } else if (ch === ']') {
+      depth--
+      current += ch
+    } else if (ch === ' ' && depth === 0) {
+      if (current) { tokens.push(current); current = '' }
+    } else {
+      current += ch
+    }
   }
-
-  const hasRepeats = Object.keys(seen).length < measureStrings.length
-  return { seen, labels, hasRepeats }
+  if (current) tokens.push(current)
+  return tokens
 }
 
-// ── Step 9 — built-in syntax checker ─────────────────────────────────────────
+// Applies Rules 2 & 3: compress consecutive identical tokens.
+// Simple note tokens use !N; bracket group tokens use *N.
+function condenseMeasure(str) {
+  const tokens = tokenizeMeasure(str)
+  if (tokens.length <= 1) return str
+
+  const result = []
+  let i = 0
+  while (i < tokens.length) {
+    const token = tokens[i]
+    let count = 1
+    while (i + count < tokens.length && tokens[i + count] === token) count++
+
+    if (count > 1) {
+      const isBracketGroup = token.startsWith('[')
+      result.push(isBracketGroup ? `${token}*${count}` : `${token}!${count}`)
+    } else {
+      result.push(token)
+    }
+    i += count
+  }
+  return result.join(' ')
+}
+
+// ── Step 7 — merge consecutive identical arrange() entries (Rules 1 & 5) ─────
+
+function mergeArrangeEntries(labels) {
+  if (labels.length === 0) return []
+  const merged = []
+  let i = 0
+  while (i < labels.length) {
+    const label = labels[i]
+    let count = 1
+    while (i + count < labels.length && labels[i + count] === label) count++
+    merged.push({ label, count })
+    i += count
+  }
+  return merged
+}
+
+// ── Step 8 — built-in syntax checker ─────────────────────────────────────────
 
 function validateOutput(code) {
   const errors = []
@@ -243,14 +282,201 @@ function validateOutput(code) {
   return { code, errors }
 }
 
+// ── Step 9 — auto-fix invalid output ─────────────────────────────────────────
+
+function autoFixCode(code) {
+  let fixCount = 0
+  const lines = code.split('\n')
+  const fixed = lines.map(line => {
+    let out = line
+
+    // Fix 1: invalid sound names
+    const soundMatch = out.match(/\.sound\("([^"]+)"\)/)
+    if (soundMatch) {
+      const name = soundMatch[1]
+      if (!KNOWN_GOOD_SOUNDS.includes(name)) {
+        let replacement
+        if (name.includes('piano'))                                  replacement = 'gm_acoustic_grand_piano'
+        else if (name.includes('bass'))                              replacement = 'gm_acoustic_bass'
+        else if (name.includes('violin') || name.includes('string')) replacement = 'gm_violin'
+        else if (name.includes('flute') || name.includes('wind'))    replacement = 'gm_flute'
+        else if (name.includes('guitar'))                            replacement = 'gm_acoustic_guitar_nylon'
+        else if (name.includes('trumpet') || name.includes('brass')) replacement = 'gm_trumpet'
+        else                                                         replacement = 'gm_acoustic_grand_piano'
+        out = out.replace(soundMatch[0], `.sound("${replacement}")`)
+        fixCount++
+      }
+    }
+
+    // Fix 2: @0.5 @0.25 @0.125 — invalid modifiers
+    if (/@0\.(5|25|125)\b/.test(out)) {
+      console.warn('[autoFix] Invalid @ modifier in line:', out)
+      out = out.replace(/@0\.5\b/g, '')
+      out = out.replace(/@0\.25\b/g, '')
+      out = out.replace(/@0\.125\b/g, '')
+      fixCount++
+    }
+
+    // Fix 3: division by zero
+    if (/>\s*\/\s*0/.test(out)) {
+      console.warn('[autoFix] Division by zero in line:', out)
+      out = out.replace(/\/\s*0\b/, '/1')
+      fixCount++
+    }
+
+    // Fix 4: note() with empty string
+    if (/note\(""\)/.test(out)) {
+      console.warn('[autoFix] Empty note pattern in line:', out)
+      out = out.replace(/note\(""\)/, 'note("~ ~ ~ ~")')
+      fixCount++
+    }
+
+    // Fix 5: unclosed brackets in note() pattern strings
+    const noteMatch = out.match(/note\("(.+)"\)/)
+    if (noteMatch) {
+      let inner = noteMatch[1]
+      const openSquare  = (inner.match(/\[/g) ?? []).length
+      const closeSquare = (inner.match(/\]/g) ?? []).length
+      if (openSquare > closeSquare) {
+        inner += ']'.repeat(openSquare - closeSquare)
+        out = out.replace(noteMatch[0], `note("${inner}")`)
+        console.warn('[autoFix] Fixed unclosed brackets')
+        fixCount++
+      }
+    }
+
+    return out
+  })
+
+  if (fixCount > 0) {
+    console.log(`[autoFix] Applied ${fixCount} fix(es)`)
+  }
+  return fixed.join('\n')
+}
+
 // ── Instrument / label tables ─────────────────────────────────────────────────
 
-const INSTRUMENTS = {
+const VALID_INSTRUMENTS = {
   treble: 'gm_acoustic_grand_piano',
   bass:   'gm_acoustic_bass',
   staff2: 'gm_violin',
   staff3: 'gm_cello',
   staff4: 'gm_flute',
+}
+
+const KNOWN_GOOD_SOUNDS = [
+  'gm_acoustic_grand_piano',
+  'gm_bright_acoustic_piano',
+  'gm_electric_grand_piano',
+  'gm_honky_tonk_piano',
+  'gm_electric_piano_1',
+  'gm_electric_piano_2',
+  'gm_harpsichord',
+  'gm_clavi',
+  'gm_celesta',
+  'gm_glockenspiel',
+  'gm_music_box',
+  'gm_vibraphone',
+  'gm_marimba',
+  'gm_xylophone',
+  'gm_tubular_bells',
+  'gm_dulcimer',
+  'gm_drawbar_organ',
+  'gm_percussive_organ',
+  'gm_rock_organ',
+  'gm_church_organ',
+  'gm_reed_organ',
+  'gm_accordion',
+  'gm_harmonica',
+  'gm_tango_accordion',
+  'gm_acoustic_guitar_nylon',
+  'gm_acoustic_guitar_steel',
+  'gm_electric_guitar_jazz',
+  'gm_electric_guitar_clean',
+  'gm_electric_guitar_muted',
+  'gm_overdriven_guitar',
+  'gm_distortion_guitar',
+  'gm_guitar_harmonics',
+  'gm_acoustic_bass',
+  'gm_electric_bass_finger',
+  'gm_electric_bass_pick',
+  'gm_fretless_bass',
+  'gm_slap_bass_1',
+  'gm_slap_bass_2',
+  'gm_synth_bass_1',
+  'gm_synth_bass_2',
+  'gm_violin',
+  'gm_viola',
+  'gm_cello',
+  'gm_contrabass',
+  'gm_tremolo_strings',
+  'gm_pizzicato_strings',
+  'gm_orchestral_harp',
+  'gm_timpani',
+  'gm_string_ensemble_1',
+  'gm_string_ensemble_2',
+  'gm_synth_strings_1',
+  'gm_synth_strings_2',
+  'gm_choir_aahs',
+  'gm_voice_oohs',
+  'gm_synth_voice',
+  'gm_orchestra_hit',
+  'gm_trumpet',
+  'gm_trombone',
+  'gm_tuba',
+  'gm_muted_trumpet',
+  'gm_french_horn',
+  'gm_brass_section',
+  'gm_synth_brass_1',
+  'gm_synth_brass_2',
+  'gm_soprano_sax',
+  'gm_alto_sax',
+  'gm_tenor_sax',
+  'gm_baritone_sax',
+  'gm_oboe',
+  'gm_english_horn',
+  'gm_bassoon',
+  'gm_clarinet',
+  'gm_piccolo',
+  'gm_flute',
+  'gm_recorder',
+  'gm_pan_flute',
+  'gm_blown_bottle',
+  'gm_shakuhachi',
+  'gm_whistle',
+  'gm_ocarina',
+  'gm_lead_1_square',
+  'gm_lead_2_sawtooth',
+  'gm_lead_3_calliope',
+  'gm_lead_4_chiff',
+  'gm_lead_5_charang',
+  'gm_lead_6_voice',
+  'gm_lead_7_fifths',
+  'gm_lead_8_bass_lead',
+  'gm_pad_1_new_age',
+  'gm_pad_2_warm',
+  'gm_pad_3_polysynth',
+  'gm_pad_4_choir',
+  'gm_pad_5_bowed',
+  'gm_pad_6_metallic',
+  'gm_pad_7_halo',
+  'gm_pad_8_sweep',
+  'piano',
+  'sawtooth',
+  'square',
+  'triangle',
+  'sine',
+]
+
+function getValidSound(soundName) {
+  if (KNOWN_GOOD_SOUNDS.includes(soundName)) return soundName
+  if (soundName.includes('piano'))                                  return 'gm_acoustic_grand_piano'
+  if (soundName.includes('bass'))                                   return 'gm_acoustic_bass'
+  if (soundName.includes('violin') || soundName.includes('string')) return 'gm_violin'
+  if (soundName.includes('flute') || soundName.includes('wind'))    return 'gm_flute'
+  if (soundName.includes('guitar'))                                 return 'gm_acoustic_guitar_nylon'
+  if (soundName.includes('trumpet') || soundName.includes('brass')) return 'gm_trumpet'
+  return 'gm_acoustic_grand_piano'
 }
 
 const VOICE_LABELS = {
@@ -261,7 +487,7 @@ const VOICE_LABELS = {
   staff4: 'Voice 4',
 }
 
-// ── Step 8 — main export ──────────────────────────────────────────────────────
+// ── Step 10 — main export ─────────────────────────────────────────────────────
 
 /**
  * Converts validated music JSON (from claudeApi.js or musicXmlParser.js) into
@@ -289,7 +515,7 @@ export function compileToStrudel(json, patternMap = {}) { // eslint-disable-line
 
   if (allMeasures.length === 0) {
     lines.push('// No notes detected')
-    const code = lines.join('\n')
+    const code = autoFixCode(lines.join('\n'))
     validateOutput(code)
     return code
   }
@@ -298,41 +524,85 @@ export function compileToStrudel(json, patternMap = {}) { // eslint-disable-line
     allMeasures.some(m => m[v] && m[v].length > 0)
   )
 
+  // Phase 1: build condensed measure strings for all voices (Rules 2 & 3)
+  const voiceMeasures = {}
   for (const voice of voices) {
-    // Build token string for every measure in this voice
-    const measureStrings = allMeasures.map(m => {
+    voiceMeasures[voice] = allMeasures.map(m => {
       const pat = measureToPatternString(m, beatsPerMeasure)
-      return pat[voice] ?? ('~@' + beatsPerMeasure)
+      return condenseMeasure(pat[voice] ?? ('~@' + beatsPerMeasure))
     })
+  }
 
-    const { seen, labels, hasRepeats } = findRepeats(measureStrings)
+  // Phase 2: determine which voices get arrange() vs flat inline
+  const voiceUseArrange = {}
+  for (const voice of voices) {
+    const strs = voiceMeasures[voice]
+    const uniqueCount = new Set(strs).size
+    voiceUseArrange[voice] = uniqueCount < strs.length && strs.length > 4
+  }
 
-    lines.push(`// ${VOICE_LABELS[voice] ?? voice}`)
-
-    if (hasRepeats && measureStrings.length > 4) {
-      // Repeated measures: define const variables, use arrange()
-      for (const [patStr, varName] of Object.entries(seen)) {
-        lines.push(`const ${voice}_${varName} = "<[${patStr}]>/1"`)
+  // Phase 3: global pattern registry for cross-voice dedup (Rule 4)
+  // patStr → canonical varName shared across all voices that use arrange()
+  const patternRegistry = new Map()
+  let patternIdx = 0
+  for (const voice of voices) {
+    if (!voiceUseArrange[voice]) continue
+    for (const patStr of voiceMeasures[voice]) {
+      if (!patternRegistry.has(patStr)) {
+        patternRegistry.set(patStr, `pattern_${patternIdx++}`)
       }
+    }
+  }
+
+  // Phase 4: generate code
+  const declaredVars = new Set()
+  let debugVarCount = 0
+
+  for (const voice of voices) {
+    lines.push(`// ${VOICE_LABELS[voice] ?? voice}`)
+    const measureStrs = voiceMeasures[voice]
+    const sound = getValidSound(VALID_INSTRUMENTS[voice])
+
+    if (voiceUseArrange[voice]) {
+      // Declare const for each unique pattern not yet declared by a prior voice (Rule 4)
+      for (const patStr of [...new Set(measureStrs)]) {
+        const varName = patternRegistry.get(patStr)
+        if (!declaredVars.has(varName)) {
+          const fullValue = `"<[${patStr}]>/1"`
+          lines.push(`const ${varName} = ${fullValue}`)
+          if (debugVarCount < 3) {
+            console.log(`[strudelCompiler] const ${varName} =`, fullValue)
+            debugVarCount++
+          }
+          declaredVars.add(varName)
+        }
+      }
+
       lines.push(``)
       lines.push(`$: arrange(`)
-      for (const label of labels) {
-        lines.push(`  [1, note(${voice}_${label}).sound("${INSTRUMENTS[voice]}").room(0.3)],`)
+
+      // Merge consecutive identical labels (Rules 1 & 5)
+      const labels = measureStrs.map(s => patternRegistry.get(s))
+      const merged = mergeArrangeEntries(labels)
+      for (const { label, count } of merged) {
+        lines.push(`  [${count}, note(${label}).sound("${sound}").room(0.3)],`)
       }
+
       lines.push(`)`)
     } else {
-      // No significant repeats: flat pattern string
-      const N     = measureStrings.length
-      const inner = measureStrings.map(m => '[' + m + ']').join(' ')
+      // No significant repeats or short piece: flat inline pattern
+      const N     = measureStrs.length
+      const inner = measureStrs.map(m => '[' + m + ']').join(' ')
       lines.push(`$: note("<${inner}>/${N}")`)
-      lines.push(`  .sound("${INSTRUMENTS[voice]}")`)
+      lines.push(`  .sound("${sound}")`)
       lines.push(`  .room(0.3)`)
     }
 
     lines.push(``)
   }
 
-  const code = lines.join('\n')
-  validateOutput(code)
-  return code
+  const rawCode = lines.join('\n')
+  const fixedCode = autoFixCode(rawCode)
+  validateOutput(fixedCode)
+  return fixedCode
 }
