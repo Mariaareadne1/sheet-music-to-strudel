@@ -11,6 +11,7 @@ function isAccepted(file) {
   if (!file) return false
   const name = (file.name ?? '').toLowerCase()
   if (name.endsWith('.xml') || name.endsWith('.mxl')) return true
+  if (name.endsWith('.mid') || name.endsWith('.midi')) return true
   return IMAGE_TYPES.has(file.type) || XML_TYPES.has(file.type)
 }
 
@@ -82,7 +83,7 @@ export default function UploadZone({ onFile }) {
         <input
           ref={inputRef}
           type="file"
-          accept=".xml,.mxl,.pdf,.png,.jpg,.jpeg,.webp"
+          accept=".xml,.mxl,.mid,.midi,.pdf,.png,.jpg,.jpeg,.webp"
           className="hidden"
           onChange={handleChange}
         />
@@ -100,36 +101,37 @@ export default function UploadZone({ onFile }) {
             </p>
           </div>
 
-          {/* Two-mode legend */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 text-xs font-mono">
+          {/* Three-mode legend */}
+          <div className="flex flex-col items-center gap-2 text-xs font-mono w-full max-w-sm">
             {/* XML / MXL — high accuracy */}
             <div
-              className="flex items-center gap-2 px-3 py-2 rounded-lg"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg w-full"
               style={{ background: 'rgba(74, 222, 128, 0.08)', border: '1px solid rgba(74, 222, 128, 0.25)' }}
             >
-              <span
-                className="px-1.5 py-0.5 rounded text-xs font-bold"
-                style={{ background: 'rgba(74, 222, 128, 0.2)', color: '#4ade80' }}
-              >
-                HIGH ACCURACY
+              <span style={{ color: '#4ade80', flexShrink: 0 }}>✓</span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                <span style={{ color: '#4ade80' }}>MusicXML / MXL</span> — perfect accuracy
               </span>
-              <span style={{ color: 'var(--text-secondary)' }}>XML / MXL</span>
             </div>
-
-            <span className="hidden sm:block" style={{ color: 'var(--text-dim)' }}>·</span>
-
+            {/* MIDI — high accuracy */}
+            <div
+              className="flex items-center gap-2 px-3 py-2 rounded-lg w-full"
+              style={{ background: 'rgba(74, 222, 128, 0.08)', border: '1px solid rgba(74, 222, 128, 0.25)' }}
+            >
+              <span style={{ color: '#4ade80', flexShrink: 0 }}>✓</span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                <span style={{ color: '#4ade80' }}>MIDI</span> — perfect accuracy
+              </span>
+            </div>
             {/* PDF / Image — AI vision */}
             <div
-              className="flex items-center gap-2 px-3 py-2 rounded-lg"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg w-full"
               style={{ background: 'rgba(250, 204, 21, 0.07)', border: '1px solid rgba(250, 204, 21, 0.2)' }}
             >
-              <span
-                className="px-1.5 py-0.5 rounded text-xs font-bold"
-                style={{ background: 'rgba(250, 204, 21, 0.15)', color: '#facc15' }}
-              >
-                AI VISION
+              <span style={{ color: '#facc15', flexShrink: 0 }}>~</span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                <span style={{ color: '#facc15' }}>PDF / Image</span> — AI transcription
               </span>
-              <span style={{ color: 'var(--text-secondary)' }}>PDF / PNG / JPG</span>
             </div>
           </div>
 
@@ -138,6 +140,7 @@ export default function UploadZone({ onFile }) {
             {[
               { fmt: 'MXL',  accent: '#4ade80' },
               { fmt: 'XML',  accent: '#4ade80' },
+              { fmt: 'MID',  accent: '#4ade80' },
               { fmt: 'PDF',  accent: 'var(--text-secondary)' },
               { fmt: 'PNG',  accent: 'var(--text-secondary)' },
               { fmt: 'JPG',  accent: 'var(--text-secondary)' },

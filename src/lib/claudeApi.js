@@ -5,6 +5,7 @@ import {
   cropMeasures,
   findRecurringPatterns,
 } from './scoreAnalyzer.js'
+import { detectKeyFromNotes } from './keyDetector.js'
 
 // ── Strudel syntax reference (injected into Claude's system prompt) ──────────
 
@@ -323,6 +324,19 @@ export async function callClaudeAPI(images, onProgress = () => {}) {
   onProgress(95, 'Finalizing transcription...')
 
   const json = extractAndValidateJSON(rawText)
+
+  // Algorithmic key detection — overrides Claude's key with Krumhansl-Schmuckler
+  try {
+    const allTrebleNotes = (json.sections ?? [])
+      .flatMap(s => s.measures ?? [])
+      .flatMap(m => m.treble ?? [])
+    if (allTrebleNotes.length > 0) {
+      json.key = detectKeyFromNotes(allTrebleNotes)
+    }
+  } catch (e) {
+    console.warn('[keyDetector] Non-fatal error during key detection:', e.message)
+  }
+
   return { json, patternMap }
 }
 

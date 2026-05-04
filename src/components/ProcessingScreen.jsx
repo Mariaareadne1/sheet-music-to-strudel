@@ -10,12 +10,20 @@
  *   mode       – 'ai' (default) | 'xml'  controls step list and header colour
  */
 export default function ProcessingScreen({ statusMsg, progress = 0, thumbnail, mode = 'ai' }) {
-  const isXml = mode === 'xml'
+  const isXml  = mode === 'xml'
+  const isMidi = mode === 'midi'
 
   const STEPS = isXml
     ? [
         { label: 'Reading MusicXML structure', threshold: 20  },
         { label: 'Parsing notes and rhythms',  threshold: 50  },
+        { label: 'Compiling Strudel patterns', threshold: 80  },
+        { label: 'Validating syntax',          threshold: 100 },
+      ]
+    : isMidi
+    ? [
+        { label: 'Parsing MIDI data',          threshold: 20  },
+        { label: 'Detecting key & tempo',      threshold: 50  },
         { label: 'Compiling Strudel patterns', threshold: 80  },
         { label: 'Validating syntax',          threshold: 100 },
       ]
@@ -106,14 +114,16 @@ export default function ProcessingScreen({ statusMsg, progress = 0, thumbnail, m
       <div className="space-y-1">
         <p
           className="font-mono text-base sm:text-lg"
-          style={{ color: isXml ? '#4ade80' : 'var(--accent)' }}
+          style={{ color: (isXml || isMidi) ? '#4ade80' : 'var(--accent)' }}
         >
-          {isXml ? '// Parsing MusicXML' : (statusMsg || 'Processing...')}
+          {isXml  ? '// Parsing MusicXML' :
+           isMidi ? '// Parsing MIDI'     :
+           (statusMsg || 'Processing...')}
         </p>
         <p className="text-xs sm:text-sm font-mono" style={{ color: 'var(--text-dim)' }}>
-          {isXml
-            ? statusMsg || 'High-accuracy parse in progress...'
-            : 'Claude is reading your sheet music'
+          {isXml  ? statusMsg || 'High-accuracy parse in progress...'  :
+           isMidi ? statusMsg || 'Converting MIDI tracks to Strudel...' :
+           'Claude is reading your sheet music'
           }
         </p>
       </div>

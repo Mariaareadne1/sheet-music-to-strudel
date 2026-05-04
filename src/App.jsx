@@ -9,6 +9,8 @@ import { compileToStrudel } from './lib/strudelCompiler.js'
 import { saveToHistory }    from './lib/history.js'
 import { createThumbnail }  from './lib/thumbnail.js'
 import { parseMusicXml, isMusicXmlFile } from './lib/musicXmlParser.js'
+import { parseMidiFile, isMidiFile, midiTracksToJson } from './lib/midiParser.js'
+import { detectKeyFromNotes } from './lib/keyDetector.js'
 
 const STAGES = { UPLOAD: 'upload', PROCESSING: 'processing', RESULTS: 'results', ERROR: 'error' }
 
@@ -27,7 +29,7 @@ export default function App() {
   const [error,          setError]         = useState(null)
   const [thumbnail,      setThumbnail]     = useState(null)
   const [historyOpen,    setHistoryOpen]   = useState(false)
-  const [processingMode, setProcessingMode] = useState('ai')  // 'ai' | 'xml'
+  const [processingMode, setProcessingMode] = useState('ai')  // 'ai' | 'xml' | 'midi'
 
   // Persist theme across page reloads
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') ?? 'dark')
@@ -49,11 +51,56 @@ export default function App() {
     setThumbnail(null)
     setProgress(5)
 
-    const isXml = isMusicXmlFile(file)
-    setProcessingMode(isXml ? 'xml' : 'ai')
+    const isXml  = isMusicXmlFile(file)
+    const isMidi = isMidiFile(file)
+    setProcessingMode(isXml ? 'xml' : isMidi ? 'midi' : 'ai')
 
     try {
-      if (isXml) {
+      if (isMidi) {
+        // ── MIDI path — deterministic parse, no AI needed ─────────────────────
+
+        setStatusMsg('Parsing MIDI file...')
+        setProgress(20)
+        const { tracks, bpm, timeSignature } = await parseMidiFile(file)
+
+        setStatusMsg('Detecting key & tempo...')
+        setProgress(45)
+        const rawJson = midiTracksToJson(tracks, bpm, timeSignature)
+
+        // Algorithmic key detection from all notes across all voices
+        try {
+          const allNotes = (rawJson.sections ?? [])
+            .flatMap(s => s.measures ?? [])
+            .flatMap(m => Object.values(m).flat())
+          if (allNotes.length > 0) {
+            rawJson.key = detectKeyFromNotes(allNotes)
+          }
+        } catch { /* non-fatal */ }
+
+        setStatusMsg('Compiling Strudel patterns...')
+        setProgress(70)
+        const rawCode = compileToStrudel(rawJson, {})
+
+        setStatusMsg('Validating syntax...')
+        setProgress(88)
+        const strudelCode = await validateCodeWithClaude(rawCode)
+
+        saveToHistory({
+          title:         rawJson.title,
+          bpm:           rawJson.bpm,
+          timeSignature: rawJson.timeSignature,
+          key:           rawJson.key,
+          code:          strudelCode,
+          thumbnail:     null,
+          source:        'midi',
+        })
+
+        setProgress(100)
+        await delay(150)
+        setResult({ code: strudelCode, meta: rawJson, thumbnail: null, source: 'midi' })
+        setStage(STAGES.RESULTS)
+
+      } else if (isXml) {
         // ── MusicXML path — no AI needed ─────────────────────────────────────
 
         setStatusMsg('Reading MusicXML structure...')

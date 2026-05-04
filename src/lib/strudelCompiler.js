@@ -25,143 +25,175 @@ const BEAT_VALUE = {
   'sixteenth_triplet': 1 / 6,
 }
 
-// ── Step 1 — pitch string ─────────────────────────────────────────────────────
+// ── Step 2 — GridBuilder: beat-level note grid (adapted from midi-strudel) ────
 
-function pitchToString(note) {
-  if (!note.pitch || note.pitch === 'rest') return '~'
-  return note.pitch.toLowerCase().replace(/[^a-g#b0-9]/g, '')
+function gcd(a, b) { return !b ? a : gcd(b, a % b) }
+function lcm(a, b) { if (a === 0 || b === 0) return 0; return (a * b) / gcd(a, b) }
+
+// Collapses a flat grid by removing redundant sustain slots when every sub-grid
+// cell after the first is `_`.  E.g. ['c4','_','_','_'] → ['c4'] (whole note).
+function simplifyGrid(grid) {
+  const len = grid.length
+  for (let d = 1; d <= len; d++) {
+    if (len % d !== 0) continue
+    const step = len / d
+    let possible = true
+    for (let i = 0; i < len; i += step) {
+      for (let j = 1; j < step; j++) {
+        if (grid[i + j] !== '_') { possible = false; break }
+      }
+      if (!possible) break
+    }
+    if (possible) {
+      const newGrid = []
+      for (let i = 0; i < len; i += step) newGrid.push(grid[i])
+      return newGrid
+    }
+  }
+  return grid
 }
 
-// ── Step 2 — group notes into beat slots ──────────────────────────────────────
+// Joins per-beat grids of potentially different resolutions into one flat grid
+// by expanding shorter grids with `_` padding to match the LCM resolution,
+// then simplifying.
+function flattenGrid(beatGrids) {
+  const lengths  = beatGrids.map(g => g.length)
+  const totalLCM = lengths.reduce((a, b) => lcm(a, b), 1)
+  const fullGrid = []
 
-/**
- * Groups a voice's note array into beat-sized slots.
- *
- * Each slot represents a quantum of time that maps to one token in the final
- * measure string.  Slots accumulate events until their beat total crosses a
- * clean boundary (1.0, 1.5, 2.0, 3.0, 4.0…).
- *
- * Special case: two quarter triplets accumulate to 1.333 beats (4/3), which
- * is NOT a clean boundary.  The flush is suppressed so the third triplet can
- * join them, completing the 2-beat group that slotToToken expects.
- */
-function groupNotesIntoBeats(notes, beatsPerMeasure) {
-  // ── chord grouping: consecutive notes with chord:true attach to the one before
-  const events = []
-  let i = 0
+  for (const grid of beatGrids) {
+    const factor = totalLCM / grid.length
+    if (factor === 1) {
+      fullGrid.push(...grid)
+    } else {
+      for (const cell of grid) {
+        fullGrid.push(cell)
+        for (let k = 1; k < factor; k++) fullGrid.push('_')
+      }
+    }
+  }
+
+  return simplifyGrid(fullGrid)
+}
+
+// Finds the coarsest grid resolution (fewest ticks) that still places every
+// note at an exact tick boundary.
+function getBestResolution(notes, startTime, duration) {
+  const possibleResolutions = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
+  const ERROR_TOLERANCE = 0.05
+
+  for (const res of possibleResolutions) {
+    const tickDur = duration / res
+    let fits = true
+    for (const n of notes) {
+      const rel  = n.startTime - startTime
+      const tick = rel / tickDur
+      if (Math.abs(tick - Math.round(tick)) > ERROR_TOLERANCE) { fits = false; break }
+    }
+    if (fits) return res
+  }
+  return 16
+}
+
+// Builds a single-beat grid from notes that start within [beatStart, beatEnd).
+// Chords (same startTick) are represented as [a,b,c] in Strudel mini-notation.
+// Sustain ticks for multi-tick notes are marked `_`.
+function buildBeatGrid(notes, beatStart, beatDuration) {
+  if (notes.length === 0) return ['~']
+
+  const res     = getBestResolution(notes, beatStart, beatDuration)
+  const grid    = new Array(res).fill('~')
+  const tickDur = beatDuration / res
+
+  for (const note of notes) {
+    const relStart = note.startTime - beatStart
+    const startTick = Math.round(relStart / tickDur)
+    const endTick   = Math.min(res, Math.round((note.startTime + note.duration - beatStart) / tickDur))
+    const pitchS = (!note.pitch || note.pitch === 'rest')
+      ? '~'
+      : note.pitch.toLowerCase().replace(/[^a-g#b0-9]/g, '')
+
+    if (startTick >= res) continue
+
+    if (pitchS === '~') {
+      // rest: leave the slot — don't override a real note
+    } else if (grid[startTick] === '~' || grid[startTick] === '_') {
+      grid[startTick] = pitchS
+    } else {
+      // chord: accumulate inside [a,b,c] Strudel bracket notation
+      const existing = grid[startTick].startsWith('[')
+        ? grid[startTick].slice(1, -1)
+        : grid[startTick]
+      grid[startTick] = `[${existing},${pitchS}]`
+    }
+
+    // Mark sustain ticks within this beat
+    for (let i = startTick + 1; i < endTick; i++) {
+      if (grid[i] === '~') grid[i] = '_'
+    }
+  }
+
+  return grid
+}
+
+// Converts a voice's note list to the Strudel mini-notation string for one measure.
+// notes: [{pitch, startTime, duration}] — startTime and duration in beats, 0-based.
+// Notes that span beat boundaries are represented with `_` sustain tokens in the
+// following beats so duration information is preserved after grid simplification.
+function measureToStrudelString(notes, beatsPerMeasure, measureDuration) {
+  const beatDuration = measureDuration / beatsPerMeasure
+  const beatGrids    = []
+
+  for (let i = 0; i < beatsPerMeasure; i++) {
+    const beatStart = i * beatDuration
+    const beatEnd   = beatStart + beatDuration
+    const beatNotes = notes.filter(n =>
+      n.startTime >= beatStart - 0.001 && n.startTime < beatEnd - 0.001
+    )
+
+    // A prior non-rest note that spans into this beat → sustain marker
+    const isSustainBeat = beatNotes.length === 0 && notes.some(n =>
+      n.startTime < beatStart - 0.001 &&
+      n.startTime + n.duration > beatStart + 0.001 &&
+      n.pitch !== 'rest'
+    )
+
+    beatGrids.push(isSustainBeat ? ['_'] : buildBeatGrid(beatNotes, beatStart, beatDuration))
+  }
+
+  return flattenGrid(beatGrids).join(' ')
+}
+
+// ── Step 3 — convert voice notes → GridBuilder format ─────────────────────────
+
+// Translates {pitch, duration: string, chord?} notes into {pitch, startTime, duration}
+// using BEAT_VALUE for the numeric conversion. Chord notes share their startTime.
+function convertNotesToGrid(notes) {
+  const result = []
+  let time = 0
+  let i    = 0
+
   while (i < notes.length) {
-    const event = { notes: [notes[i]], beats: BEAT_VALUE[notes[i].duration] ?? 1.0 }
+    const note = notes[i]
+    const dur  = BEAT_VALUE[note.duration] ?? 1.0
+    result.push({ pitch: note.pitch, startTime: time, duration: dur })
     i++
+
+    // Collect chord notes (same onset time as the leading note)
     while (i < notes.length && notes[i].chord === true) {
-      event.notes.push(notes[i])
+      const cNote = notes[i]
+      result.push({
+        pitch:     cNote.pitch,
+        startTime: time,
+        duration:  BEAT_VALUE[cNote.duration] ?? dur,
+      })
       i++
     }
-    events.push(event)
+
+    time += dur
   }
 
-  // ── accumulate into slots
-  const slots        = []
-  let currentSlot    = []
-  let currentBeats   = 0.0
-
-  for (const event of events) {
-    currentSlot.push(event)
-    currentBeats += event.beats
-    currentBeats  = Math.round(currentBeats * 1000) / 1000
-
-    // Suppress flush when we're mid-quarter-triplet group (4/3 ≈ 1.333 beats):
-    // the third triplet will bring the total to exactly 2.0.
-    const atPartialQTriplet = Math.abs(currentBeats - 4 / 3) < 0.005
-
-    if (currentBeats >= 1.0 && !atPartialQTriplet) {
-      slots.push({ events: currentSlot, totalBeats: currentBeats })
-      currentSlot  = []
-      currentBeats = 0.0
-    }
-  }
-
-  // flush any remaining events (incomplete last beat)
-  if (currentSlot.length > 0) {
-    slots.push({ events: currentSlot, totalBeats: currentBeats })
-  }
-
-  return slots
-}
-
-// ── Step 3 — single event → token string ─────────────────────────────────────
-
-function eventToToken(event) {
-  if (event.notes.length === 1) {
-    return pitchToString(event.notes[0])
-  }
-  // Chord: comma-separated pitches inside brackets
-  return '[' + event.notes.map(n => pitchToString(n)).join(',') + ']'
-}
-
-// ── Step 4 — beat slot → Strudel token ───────────────────────────────────────
-
-function slotToToken(slot) {
-  const { events, totalBeats } = slot
-
-  // ── Case 1: single event spanning one or more beats
-  if (events.length === 1 && totalBeats >= 1.0) {
-    const token = eventToToken(events[0])
-    if (totalBeats === 1.0) return token
-    if (totalBeats === 1.5) return token + '@1.5'
-    if (totalBeats === 2.0) return token + '@2'
-    if (totalBeats === 3.0) return token + '@3'
-    if (totalBeats === 4.0) return token + '@4'
-    // Non-standard long duration — use exact numeric modifier
-    return token + '@' + totalBeats
-  }
-
-  // ── Case 2: multiple events sharing a beat slot
-  const tokens = events.map(e => eventToToken(e))
-
-  // Two eighth notes → [a b]
-  if (events.length === 2 &&
-      events.every(e => Math.abs(e.beats - 0.5) < 0.005)) {
-    return '[' + tokens.join(' ') + ']'
-  }
-
-  // Three eighth-note triplets (1 beat) → [a b c]
-  if (events.length === 3 &&
-      events.every(e => Math.abs(e.beats - 1 / 3) < 0.005)) {
-    return '[' + tokens.join(' ') + ']'
-  }
-
-  // Three quarter-note triplets (2 beats) → [a b c]@2
-  if (events.length === 3 &&
-      events.every(e => Math.abs(e.beats - 2 / 3) < 0.005)) {
-    return '[' + tokens.join(' ') + ']@2'
-  }
-
-  // Four sixteenth notes (1 beat) → [[a b c d]]
-  if (events.length === 4 &&
-      events.every(e => Math.abs(e.beats - 0.25) < 0.005)) {
-    return '[[' + tokens.join(' ') + ']]'
-  }
-
-  // Eight 32nd notes (1 beat) → [[[a b c d e f g h]]]
-  if (events.length === 8 &&
-      events.every(e => Math.abs(e.beats - 0.125) < 0.005)) {
-    return '[[[' + tokens.join(' ') + ']]]'
-  }
-
-  // Dotted-eighth + sixteenth (0.75 + 0.25 = 1 beat) → [a@3 b]
-  if (events.length === 2 &&
-      Math.abs(events[0].beats - 0.75) < 0.005 &&
-      Math.abs(events[1].beats - 0.25) < 0.005) {
-    return '[' + tokens[0] + '@3 ' + tokens[1] + ']'
-  }
-
-  // Fallback: assign integer @-weights relative to the shortest event in the slot
-  const minBeat = Math.min(...events.map(e => e.beats))
-  const weighted = events.map(e => {
-    const w = Math.round(e.beats / minBeat)
-    return w === 1 ? eventToToken(e) : eventToToken(e) + '@' + w
-  })
-  return '[' + weighted.join(' ') + ']'
+  return result
 }
 
 // ── Step 5 — one measure → per-voice token strings ───────────────────────────
@@ -172,9 +204,8 @@ function measureToPatternString(measure, beatsPerMeasure) {
   const result = {}
   for (const voice of VOICE_NAMES) {
     if (!measure[voice] || measure[voice].length === 0) continue
-    const slots  = groupNotesIntoBeats(measure[voice], beatsPerMeasure)
-    const tokens = slots.map(s => slotToToken(s))
-    result[voice] = tokens.join(' ')
+    const gridNotes = convertNotesToGrid(measure[voice])
+    result[voice]   = measureToStrudelString(gridNotes, beatsPerMeasure, beatsPerMeasure)
   }
   return result
 }
