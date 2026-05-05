@@ -8,6 +8,101 @@
 
 import { Midi } from '@tonejs/midi'
 
+// ── Instrument scoring (from midi-strudel constants.ts) ───────────────────────
+
+const INSTRUMENTS = [
+  'triangle', 'sine', 'square', 'sawtooth',
+  'gm_accordion', 'gm_acoustic_bass', 'gm_acoustic_guitar_nylon', 'gm_acoustic_guitar_steel',
+  'gm_alto_sax', 'gm_baritone_sax', 'gm_bassoon', 'gm_brass_section',
+  'gm_celesta', 'gm_cello', 'gm_choir_aahs', 'gm_church_organ',
+  'gm_clarinet', 'gm_contrabass', 'gm_distortion_guitar',
+  'gm_drawbar_organ', 'gm_electric_bass_finger', 'gm_electric_bass_pick',
+  'gm_electric_guitar_clean', 'gm_electric_guitar_jazz', 'gm_electric_guitar_muted',
+  'gm_english_horn', 'gm_epiano1', 'gm_epiano2', 'gm_flute', 'gm_french_horn',
+  'gm_fretless_bass', 'gm_glockenspiel', 'gm_harmonica', 'gm_harpsichord',
+  'gm_lead_1_square', 'gm_lead_2_sawtooth', 'gm_marimba',
+  'gm_muted_trumpet', 'gm_oboe', 'gm_orchestra_hit', 'gm_orchestral_harp',
+  'gm_overdriven_guitar', 'gm_pad_new_age', 'gm_pad_warm', 'gm_pan_flute',
+  'gm_piano', 'gm_piccolo', 'gm_pizzicato_strings',
+  'gm_slap_bass_1', 'gm_slap_bass_2', 'gm_soprano_sax',
+  'gm_string_ensemble_1', 'gm_string_ensemble_2', 'gm_synth_bass_1',
+  'gm_synth_bass_2', 'gm_synth_brass_1', 'gm_synth_choir',
+  'gm_tenor_sax', 'gm_timpani', 'gm_tremolo_strings', 'gm_trombone',
+  'gm_trumpet', 'gm_tuba', 'gm_tubular_bells', 'gm_vibraphone',
+  'gm_viola', 'gm_violin', 'gm_voice_oohs', 'gm_xylophone',
+]
+
+// Verified drum map from midi-strudel constants.ts
+export const DRUM_MAP = {
+  35: 'bd', 36: 'bd',   // Acoustic Bass Drum, Bass Drum 1
+  38: 'sd', 40: 'sd',   // Acoustic Snare, Electric Snare
+  37: 'rim',             // Side Stick
+  42: 'hh', 44: 'hh',   // Closed Hi Hat, Pedal Hi-Hat
+  46: 'oh',              // Open Hi-Hat
+  41: 'lt',              // Low Tom
+  45: 'mt',              // Low-Mid Tom
+  47: 'ht',              // Hi-Mid Tom
+  51: 'rd',              // Ride Cymbal 1
+  49: 'cr', 57: 'cr',   // Crash Cymbal 1 and 2
+  56: 'cb',              // Cowbell
+  82: 'sh',              // Shaker
+}
+
+/**
+ * Smart instrument selection from midi-strudel's scoring system.
+ * Scores each candidate instrument name against track name and family,
+ * preferring exact matches, then word matches, then fallback heuristics.
+ */
+export function getAutoSound(trackName, instrumentFamily, _programNumber) {
+  const name   = (trackName || '').toLowerCase()
+  const family = (instrumentFamily || '').toLowerCase()
+  const searchTerms = `${name} ${family}`
+
+  // Explicit override: generic synth → triangle waveform
+  if (searchTerms.includes('synth') && !searchTerms.includes('bass')
+      && !searchTerms.includes('strings') && !searchTerms.includes('brass')) {
+    return 'triangle'
+  }
+
+  // Explicit override: generic strings label → ensemble
+  if (name.trim() === 'strings' || (name.includes('string')
+      && !name.includes('guitar') && !name.includes('bass'))) {
+    return 'gm_string_ensemble_1'
+  }
+
+  // Dynamic scoring against INSTRUMENTS list
+  const trackWords = searchTerms.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(w => w.length > 2)
+  let bestInst = null
+  let maxScore = 0
+
+  for (const inst of INSTRUMENTS) {
+    if (!inst.startsWith('gm_')) continue
+    const instNameClean = inst.replace(/^gm_/, '').replace(/_/g, ' ')
+    const instWords = instNameClean.split(' ')
+    let score = 0
+    if (searchTerms.includes(instNameClean)) score += 20
+    for (const iWord of instWords) {
+      if (trackWords.includes(iWord)) score += 5
+      else if (searchTerms.includes(iWord)) score += 2
+    }
+    if (score > maxScore) { maxScore = score; bestInst = inst }
+  }
+
+  if (maxScore >= 5) return bestInst
+
+  // Fallbacks by keyword
+  if (searchTerms.includes('guitar')) {
+    if (searchTerms.includes('electric')) return 'gm_electric_guitar_clean'
+    if (searchTerms.includes('bass'))     return 'gm_electric_bass_pick'
+    return 'gm_acoustic_guitar_nylon'
+  }
+  if (searchTerms.includes('bass'))  return 'gm_acoustic_bass'
+  if (searchTerms.includes('piano')) return 'gm_piano'
+  if (searchTerms.includes('drum'))  return 'gm_synth_drum'
+
+  return 'gm_piano'
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function parseMidiFile(file) {

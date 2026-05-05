@@ -30,6 +30,29 @@ const BEAT_VALUE = {
 function gcd(a, b) { return !b ? a : gcd(b, a % b) }
 function lcm(a, b) { if (a === 0 || b === 0) return 0; return (a * b) / gcd(a, b) }
 
+// Converts a simplified grid array to a Strudel mini-notation string.
+// Sustained notes (grid[i] followed by '_' tokens) become note@N notation.
+// Leading or bare '_' tokens become '~' rests.  Never emits raw '_' in output.
+function gridToString(grid) {
+  const tokens = []
+  let i = 0
+  while (i < grid.length) {
+    if (grid[i] === '~' || grid[i] === '_') {
+      let count = 1
+      while (i + count < grid.length && grid[i + count] === '_') count++
+      tokens.push(count === 1 ? '~' : `~@${count}`)
+      i += count
+    } else {
+      let sustainCount = 0
+      while (i + sustainCount + 1 < grid.length && grid[i + sustainCount + 1] === '_') sustainCount++
+      const totalDuration = sustainCount + 1
+      tokens.push(totalDuration === 1 ? grid[i] : `${grid[i]}@${totalDuration}`)
+      i += totalDuration
+    }
+  }
+  return tokens.join(' ')
+}
+
 // Collapses a flat grid by removing redundant sustain slots when every sub-grid
 // cell after the first is `_`.  E.g. ['c4','_','_','_'] → ['c4'] (whole note).
 function simplifyGrid(grid) {
@@ -161,7 +184,7 @@ function measureToStrudelString(notes, beatsPerMeasure, measureDuration) {
     beatGrids.push(isSustainBeat ? ['_'] : buildBeatGrid(beatNotes, beatStart, beatDuration))
   }
 
-  return flattenGrid(beatGrids).join(' ')
+  return gridToString(flattenGrid(beatGrids))
 }
 
 // ── Step 3 — convert voice notes → GridBuilder format ─────────────────────────
@@ -200,12 +223,12 @@ function convertNotesToGrid(notes) {
 
 const VOICE_NAMES = ['treble', 'bass', 'staff2', 'staff3', 'staff4']
 
-function measureToPatternString(measure, beatsPerMeasure) {
+function measureToPatternString(measure, beatsPerMeasure, measureDuration) {
   const result = {}
   for (const voice of VOICE_NAMES) {
     if (!measure[voice] || measure[voice].length === 0) continue
     const gridNotes = convertNotesToGrid(measure[voice])
-    result[voice]   = measureToStrudelString(gridNotes, beatsPerMeasure, beatsPerMeasure)
+    result[voice]   = measureToStrudelString(gridNotes, beatsPerMeasure, measureDuration ?? beatsPerMeasure)
   }
   return result
 }
@@ -901,13 +924,13 @@ function autoFixCode(code) {
       const name = soundMatch[1]
       if (!KNOWN_GOOD_SOUNDS.includes(name)) {
         let replacement
-        if (name.includes('piano'))                                  replacement = 'gm_acoustic_grand_piano'
+        if (name.includes('piano'))                                  replacement = 'gm_piano'
         else if (name.includes('bass'))                              replacement = 'gm_acoustic_bass'
         else if (name.includes('violin') || name.includes('string')) replacement = 'gm_violin'
         else if (name.includes('flute') || name.includes('wind'))    replacement = 'gm_flute'
         else if (name.includes('guitar'))                            replacement = 'gm_acoustic_guitar_nylon'
         else if (name.includes('trumpet') || name.includes('brass')) replacement = 'gm_trumpet'
-        else                                                         replacement = 'gm_acoustic_grand_piano'
+        else                                                         replacement = 'gm_piano'
         out = out.replace(soundMatch[0], `.sound("${replacement}")`)
         fixCount++
       }
@@ -962,7 +985,7 @@ function autoFixCode(code) {
 // ── Instrument / label tables ─────────────────────────────────────────────────
 
 const VALID_INSTRUMENTS = {
-  treble: 'gm_acoustic_grand_piano',
+  treble: 'gm_piano',
   bass:   'gm_acoustic_bass',
   staff2: 'gm_violin',
   staff3: 'gm_cello',
@@ -970,118 +993,53 @@ const VALID_INSTRUMENTS = {
 }
 
 const KNOWN_GOOD_SOUNDS = [
-  'gm_acoustic_grand_piano',
-  'gm_bright_acoustic_piano',
-  'gm_electric_grand_piano',
-  'gm_honky_tonk_piano',
-  'gm_electric_piano_1',
-  'gm_electric_piano_2',
-  'gm_harpsichord',
-  'gm_clavi',
-  'gm_celesta',
-  'gm_glockenspiel',
-  'gm_music_box',
-  'gm_vibraphone',
-  'gm_marimba',
-  'gm_xylophone',
-  'gm_tubular_bells',
-  'gm_dulcimer',
-  'gm_drawbar_organ',
-  'gm_percussive_organ',
-  'gm_rock_organ',
-  'gm_church_organ',
-  'gm_reed_organ',
-  'gm_accordion',
-  'gm_harmonica',
-  'gm_tango_accordion',
-  'gm_acoustic_guitar_nylon',
-  'gm_acoustic_guitar_steel',
-  'gm_electric_guitar_jazz',
-  'gm_electric_guitar_clean',
-  'gm_electric_guitar_muted',
-  'gm_overdriven_guitar',
-  'gm_distortion_guitar',
-  'gm_guitar_harmonics',
-  'gm_acoustic_bass',
-  'gm_electric_bass_finger',
-  'gm_electric_bass_pick',
-  'gm_fretless_bass',
-  'gm_slap_bass_1',
-  'gm_slap_bass_2',
-  'gm_synth_bass_1',
-  'gm_synth_bass_2',
-  'gm_violin',
-  'gm_viola',
-  'gm_cello',
-  'gm_contrabass',
-  'gm_tremolo_strings',
-  'gm_pizzicato_strings',
-  'gm_orchestral_harp',
-  'gm_timpani',
-  'gm_string_ensemble_1',
-  'gm_string_ensemble_2',
-  'gm_synth_strings_1',
-  'gm_synth_strings_2',
-  'gm_choir_aahs',
-  'gm_voice_oohs',
-  'gm_synth_voice',
-  'gm_orchestra_hit',
-  'gm_trumpet',
-  'gm_trombone',
-  'gm_tuba',
-  'gm_muted_trumpet',
-  'gm_french_horn',
-  'gm_brass_section',
-  'gm_synth_brass_1',
-  'gm_synth_brass_2',
-  'gm_soprano_sax',
-  'gm_alto_sax',
-  'gm_tenor_sax',
-  'gm_baritone_sax',
-  'gm_oboe',
-  'gm_english_horn',
-  'gm_bassoon',
-  'gm_clarinet',
-  'gm_piccolo',
-  'gm_flute',
-  'gm_recorder',
-  'gm_pan_flute',
-  'gm_blown_bottle',
-  'gm_shakuhachi',
-  'gm_whistle',
-  'gm_ocarina',
-  'gm_lead_1_square',
-  'gm_lead_2_sawtooth',
-  'gm_lead_3_calliope',
-  'gm_lead_4_chiff',
-  'gm_lead_5_charang',
-  'gm_lead_6_voice',
-  'gm_lead_7_fifths',
-  'gm_lead_8_bass_lead',
-  'gm_pad_1_new_age',
-  'gm_pad_2_warm',
-  'gm_pad_3_polysynth',
-  'gm_pad_4_choir',
-  'gm_pad_5_bowed',
-  'gm_pad_6_metallic',
-  'gm_pad_7_halo',
-  'gm_pad_8_sweep',
+  // Basic Waveforms
+  'triangle', 'sine', 'square', 'sawtooth', 'pulse', 'saw', 'sqr', 'tri',
+  'brown', 'pink', 'white',
+  // GM Instruments — exact names verified from midi-strudel constants.ts
+  'gm_accordion', 'gm_acoustic_bass', 'gm_acoustic_guitar_nylon', 'gm_acoustic_guitar_steel',
+  'gm_agogo', 'gm_alto_sax', 'gm_applause', 'gm_bagpipe', 'gm_banjo',
+  'gm_baritone_sax', 'gm_bassoon', 'gm_blown_bottle', 'gm_brass_section',
+  'gm_celesta', 'gm_cello', 'gm_choir_aahs', 'gm_church_organ',
+  'gm_clarinet', 'gm_clavinet', 'gm_contrabass', 'gm_distortion_guitar',
+  'gm_drawbar_organ', 'gm_dulcimer', 'gm_electric_bass_finger', 'gm_electric_bass_pick',
+  'gm_electric_guitar_clean', 'gm_electric_guitar_jazz', 'gm_electric_guitar_muted',
+  'gm_english_horn', 'gm_epiano1', 'gm_epiano2', 'gm_fiddle', 'gm_flute', 'gm_french_horn',
+  'gm_fretless_bass', 'gm_fx_atmosphere', 'gm_fx_brightness', 'gm_fx_crystal',
+  'gm_fx_echoes', 'gm_fx_goblins', 'gm_fx_rain', 'gm_fx_sci_fi', 'gm_fx_soundtrack',
+  'gm_glockenspiel', 'gm_guitar_harmonics', 'gm_harmonica', 'gm_harpsichord',
+  'gm_kalimba', 'gm_koto', 'gm_lead_1_square', 'gm_lead_2_sawtooth',
+  'gm_lead_3_calliope', 'gm_lead_4_chiff', 'gm_lead_5_charang', 'gm_lead_6_voice',
+  'gm_lead_7_fifths', 'gm_lead_8_bass_lead', 'gm_marimba', 'gm_melodic_tom',
+  'gm_music_box', 'gm_muted_trumpet', 'gm_oboe', 'gm_ocarina', 'gm_orchestra_hit',
+  'gm_orchestral_harp', 'gm_overdriven_guitar',
+  'gm_pad_bowed', 'gm_pad_choir', 'gm_pad_halo', 'gm_pad_metallic',
+  'gm_pad_new_age', 'gm_pad_poly', 'gm_pad_sweep', 'gm_pad_warm', 'gm_pan_flute',
+  'gm_percussive_organ', 'gm_piano', 'gm_piccolo', 'gm_pizzicato_strings', 'gm_recorder',
+  'gm_reed_organ', 'gm_rock_organ', 'gm_shakuhachi',
+  'gm_sitar', 'gm_slap_bass_1', 'gm_slap_bass_2', 'gm_soprano_sax',
+  'gm_steel_drums', 'gm_string_ensemble_1', 'gm_string_ensemble_2', 'gm_synth_bass_1',
+  'gm_synth_bass_2', 'gm_synth_brass_1', 'gm_synth_brass_2', 'gm_synth_choir',
+  'gm_synth_drum', 'gm_synth_strings_1', 'gm_synth_strings_2',
+  'gm_taiko_drum', 'gm_tenor_sax', 'gm_timpani', 'gm_tinkle_bell',
+  'gm_tremolo_strings', 'gm_trombone', 'gm_trumpet', 'gm_tuba',
+  'gm_tubular_bells', 'gm_vibraphone', 'gm_viola', 'gm_violin',
+  'gm_voice_oohs', 'gm_whistle', 'gm_woodblock', 'gm_xylophone',
+  // Drum sounds
+  'bd', 'sd', 'hh', 'oh', 'cp', 'rim', 'lt', 'mt', 'ht', 'rd', 'cr', 'cb', 'sh',
+  // Special
   'piano',
-  'sawtooth',
-  'square',
-  'triangle',
-  'sine',
 ]
 
 function getValidSound(soundName) {
   if (KNOWN_GOOD_SOUNDS.includes(soundName)) return soundName
-  if (soundName.includes('piano'))                                  return 'gm_acoustic_grand_piano'
+  if (soundName.includes('piano'))                                  return 'gm_piano'
   if (soundName.includes('bass'))                                   return 'gm_acoustic_bass'
   if (soundName.includes('violin') || soundName.includes('string')) return 'gm_violin'
   if (soundName.includes('flute') || soundName.includes('wind'))    return 'gm_flute'
   if (soundName.includes('guitar'))                                 return 'gm_acoustic_guitar_nylon'
   if (soundName.includes('trumpet') || soundName.includes('brass')) return 'gm_trumpet'
-  return 'gm_acoustic_grand_piano'
+  return 'gm_piano'
 }
 
 const VOICE_LABELS = {
@@ -1104,8 +1062,10 @@ const VOICE_LABELS = {
  */
 export function compileToStrudel(json, patternMap = {}) { // eslint-disable-line no-unused-vars
   const { bpm, timeSignature, title, key, sections } = json
-  const beatsPerMeasure = Array.isArray(timeSignature) ? timeSignature[0] : 4
-  const tsStr           = Array.isArray(timeSignature) ? timeSignature.join('/') : '4/4'
+  const beatsPerMeasure    = Array.isArray(timeSignature) ? timeSignature[0] : 4
+  const denominator        = Array.isArray(timeSignature) ? (timeSignature[1] ?? 4) : 4
+  const quartersPerMeasure = beatsPerMeasure * 4 / denominator
+  const tsStr              = Array.isArray(timeSignature) ? timeSignature.join('/') : '4/4'
 
   const lines = []
   lines.push(`// Generated by Sheet Music to Strudel`)
@@ -1113,7 +1073,7 @@ export function compileToStrudel(json, patternMap = {}) { // eslint-disable-line
   if (key) lines.push(`// Key: ${key}`)
   lines.push(`// Time: ${tsStr} | BPM: ${bpm || 120}`)
   lines.push(``)
-  lines.push(`setcps(${bpm || 120}/60/${beatsPerMeasure})`)
+  lines.push(`setcps(${bpm || 120}/60/${quartersPerMeasure})`)
   lines.push(``)
 
   const allMeasures = (sections ?? []).flatMap(s => s.measures ?? [])
@@ -1133,8 +1093,10 @@ export function compileToStrudel(json, patternMap = {}) { // eslint-disable-line
   const voiceMeasures = {}
   for (const voice of voices) {
     voiceMeasures[voice] = allMeasures.map(m => {
-      const pat = measureToPatternString(m, beatsPerMeasure)
-      return condenseMeasure(pat[voice] ?? ('~@' + beatsPerMeasure))
+      const pat = measureToPatternString(m, beatsPerMeasure, quartersPerMeasure)
+      const raw = pat[voice] ?? ('~@' + beatsPerMeasure)
+      // FIX 5: never let a measure string start with '_' (would produce _$: muted line)
+      return condenseMeasure(raw.startsWith('_') ? '~' + raw.slice(1) : raw)
     })
   }
 
@@ -1195,10 +1157,12 @@ export function compileToStrudel(json, patternMap = {}) { // eslint-disable-line
 
       lines.push(`)`)
     } else {
-      // No significant repeats or short piece: flat inline pattern
-      const N     = measureStrs.length
-      const inner = measureStrs.map(m => '[' + m + ']').join(' ')
-      lines.push(`$: note("<${inner}>/${N}")`)
+      // No significant repeats or short piece: flat inline pattern (FIX 6 backtick form)
+      const N          = measureStrs.length
+      const innerLines = measureStrs.map(m => '[' + m + ']').join('\n')
+      lines.push(`$: \`<`)
+      lines.push(innerLines)
+      lines.push(`>/${N}\`.as("note")`)
       lines.push(`  .sound("${sound}")`)
       lines.push(`  .room(0.3)`)
     }
@@ -1207,7 +1171,15 @@ export function compileToStrudel(json, patternMap = {}) { // eslint-disable-line
   }
 
   const rawCode = lines.join('\n')
-  const fixedCode = autoFixCode(rawCode)
+  let fixedCode = autoFixCode(rawCode)
+
+  // FIX 9: ensure arrange() and other calls are never truncated (balance parens)
+  const openParens  = (fixedCode.match(/\(/g) || []).length
+  const closeParens = (fixedCode.match(/\)/g) || []).length
+  if (openParens > closeParens) {
+    fixedCode += '\n)'.repeat(openParens - closeParens)
+  }
+
   validateOutput(fixedCode)
   return fixedCode
 }

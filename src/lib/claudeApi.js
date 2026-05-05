@@ -10,100 +10,187 @@ import { detectKeyFromNotes } from './keyDetector.js'
 // ── Strudel syntax reference (injected into Claude's system prompt) ──────────
 
 const STRUDEL_SYNTAX_REFERENCE = `
-=== STRUDEL SYNTAX RULES — MEMORIZE THESE ===
+=== STRUDEL COMPLETE LANGUAGE REFERENCE ===
 
-TEMPO:
-setcps(BPM/60/4) for 4/4 time
-setcps(BPM/60/3) for 3/4 time
-Default is 30 cpm = 120 BPM
+── TEMPO ────────────────────────────────────────────────────────
 
-NOTES:
-Use letter + octave: c4 d4 e4 f4 g4 a4 b4
-Sharps: f#4 c#5 g#3
-Flats: bb3 eb4 ab3
-Middle C = c4
-Never use MIDI numbers
+setcps(BPM/60/quartersPerMeasure)
+  4/4 → setcps(BPM/60/4)
+  3/4 → setcps(BPM/60/3)
+  6/8 → setcps(BPM/60/3)   (6 eighth notes = 3 quarter notes per cycle)
+  2/4 → setcps(BPM/60/2)
 
-DURATIONS — these are the ONLY valid ways to express note length:
-Whole note = c4@4 (fills entire 4/4 measure)
-Half note = c4@2
-Dotted half = c4@3
-Quarter note = c4 (no modifier needed, default weight = 1)
-Dotted quarter = c4@1.5
-Two eighth notes in one beat = [c4 d4] (bracket pair, no @ needed)
-Single eighth note in a beat = [c4 ~] (eighth + rest)
-Four sixteenth notes in one beat = [[c4 d4 e4 f4]]
-Eight 32nd notes in one beat = [[[c4 d4 e4 f4 g4 a4 b4 c5]]]
-Dotted eighth + sixteenth = [c4@3 d4] (3:1 weight ratio)
-Quarter triplet (3 notes over 2 beats) = [c4 e4 g4]@2
-Eighth triplet (3 notes over 1 beat) = [c4 e4 g4]
-Sixteenth triplet (3 notes over half a beat) = [[c4 e4 g4]]
+── NOTES ────────────────────────────────────────────────────────
+
+Letter + octave: c4 d4 e4 f4 g4 a4 b4
+Sharps: f#4 c#5 g#3 a#4 d#4
+Flats: bb3 eb4 ab3 db4 gb4
+Middle C = c4. C above middle C = c5. C below = c3.
+Never use MIDI integers (48, 60…) — always use letter names.
+
+── DURATIONS — only these forms are valid ────────────────────────
+
+@N = weight modifier. In a sequence "a@2 b", a gets 2/3, b gets 1/3.
+Whole note      = c4@4
+Dotted half     = c4@3
+Half note       = c4@2
+Dotted quarter  = c4@1.5
+Quarter note    = c4        (default weight 1, no modifier needed)
+Dotted eighth   = c4@1.5   (inside a bracket sub-group)
+Two eighth notes in one beat  = [c4 d4]
+Single eighth + rest           = [c4 ~]
+Four sixteenth notes           = [[c4 d4 e4 f4]]
+Eight 32nd notes               = [[[c4 d4 e4 f4 g4 a4 b4 c5]]]
+Dotted-eighth + sixteenth      = [c4@3 d4]
+Quarter triplet (3 over 2 beats) = [c4 e4 g4]@2
+Eighth triplet  (3 over 1 beat)  = [c4 e4 g4]
+Sixteenth triplet                = [[c4 e4 g4]]
 Rest = ~
-Half rest = ~@2
-Whole rest = ~@4
+Half rest = ~@2     Whole rest = ~@4
 
-NEVER USE THESE — they are invalid Strudel syntax:
-@0.5 — INVALID. Use [a b] brackets instead
-@0.25 — INVALID. Use [[a b c d]] brackets instead
-@0.125 — INVALID. Use [[[...]]] brackets instead
-.slow() on a note pattern — INVALID. Use /N inside angle brackets
-MIDI numbers like 48 or 60 — avoid, use letter names
+NEVER USE: @0.5  @0.25  @0.125 — INVALID. Use bracket notation above.
+NEVER USE: .slow() on a note pattern. Use /N inside angle brackets instead.
 
-CHORDS (multiple notes at same time):
-[c4,e4,g4] = C major chord, quarter duration
-[c4,e4,g4]@2 = C major chord, half duration
+── SUSTAIN / HOLD ───────────────────────────────────────────────
 
-SEQUENCES (multiple measures):
-note("<[measure1] [measure2] [measure3]>/3")
-The /N number = total number of measures
-Each measure's content goes inside square brackets
+_ inside a grid array = sustain the previous note.
+In the final string, convert _ to @N: c4 _ → c4@2, c4 _ _ → c4@3.
+Never output raw _ in the final pattern string.
 
-MULTIPLE VOICES:
-$: note("<...>/N").sound("instrument").room(0.3)
-$: note("<...>/N").sound("instrument").room(0.3)
-Each $: plays simultaneously and independently
+── CHORDS ───────────────────────────────────────────────────────
 
-SONG SECTIONS with arrange():
+[c4,e4,g4]     = C major chord (quarter)
+[c4,e4,g4]@2   = C major chord (half)
+
+── SEQUENCES — multiple measures ────────────────────────────────
+
+Standard form:
+  note("<[m1] [m2] [m3]>/3").sound("gm_piano")
+  The /N = total number of measures.
+
+Multiline backtick form (preferred for readability):
+  \`<
+  [m1]
+  [m2]
+  [m3]
+  >/3\`.as("note").sound("gm_piano").room(0.3)
+
+── REPETITION / REPLICATION ─────────────────────────────────────
+
+token!N   = repeat token N times       e.g. c4!4, [bd hh]!2
+token*N   = play N times per slot      e.g. hh*8, [bd hh]*4
+token@N   = weight (elongate)          e.g. c4@2, ~@4
+
+── RESTS ────────────────────────────────────────────────────────
+
+~ = rest (standard)
+~@N = rest lasting N weight units
+
+── MULTIPLE VOICES ──────────────────────────────────────────────
+
+Each $: plays simultaneously and independently:
+  $: \`<[m1] [m2]>/2\`.as("note").sound("gm_piano").room(0.3)
+  $: \`<[b1] [b2]>/2\`.as("note").sound("gm_acoustic_bass").room(0.3)
+
+── SONG SECTIONS with arrange() ─────────────────────────────────
+
 const pattern_A = "<[m1] [m2]>/2"
 const pattern_B = "<[m3] [m4]>/2"
 $: arrange(
-  [4, note(pattern_A).sound("piano").room(0.3)],
-  [8, note(pattern_B).sound("piano").room(0.3)]
+  [4, note(pattern_A).sound("gm_piano").room(0.3)],
+  [8, note(pattern_B).sound("gm_piano").room(0.3)]
 )
+[N, pattern] means play pattern for N cycles before moving to the next.
+Merge consecutive identical entries: [1,A],[1,A],[1,A] → [3,A].
 
-INSTRUMENTS:
-Piano treble: .sound("gm_acoustic_grand_piano")
-Piano bass: .sound("gm_acoustic_bass")
-Violin: .sound("gm_violin")
-Cello: .sound("gm_cello")
-Flute: .sound("gm_flute")
-Electric guitar: .sound("gm_electric_guitar_muted")
-Bass guitar: .sound("gm_electric_bass_finger")
-Synth: .sound("sawtooth") or .sound("square") or .sound("triangle")
+── INSTRUMENTS — EXACT verified names ───────────────────────────
 
-EFFECTS (all optional):
-.room(0.3) = light reverb (always add this)
-.gain(0.8) = volume
-.lpf(2000) = low pass filter
-.delay(0.3) = echo
+Piano:           gm_piano
+Acoustic bass:   gm_acoustic_bass
+Electric bass:   gm_electric_bass_finger, gm_electric_bass_pick
+Violin:          gm_violin
+Viola:           gm_viola
+Cello:           gm_cello
+Contrabass:      gm_contrabass
+String ensemble: gm_string_ensemble_1, gm_string_ensemble_2
+Trumpet:         gm_trumpet
+Trombone:        gm_trombone
+French horn:     gm_french_horn
+Tuba:            gm_tuba
+Flute:           gm_flute
+Oboe:            gm_oboe
+Clarinet:        gm_clarinet
+Bassoon:         gm_bassoon
+Alto sax:        gm_alto_sax
+Tenor sax:       gm_tenor_sax
+Harpsichord:     gm_harpsichord
+Electric piano:  gm_epiano1, gm_epiano2
+Marimba:         gm_marimba
+Vibraphone:      gm_vibraphone
+Xylophone:       gm_xylophone
+Harp:            gm_orchestral_harp
+Acoustic guitar (nylon): gm_acoustic_guitar_nylon
+Acoustic guitar (steel): gm_acoustic_guitar_steel
+Electric guitar: gm_electric_guitar_clean, gm_electric_guitar_jazz
+Choir:           gm_choir_aahs, gm_voice_oohs, gm_synth_choir
+Synth waveforms: triangle, sine, square, sawtooth, pulse
+Drums:           bd (kick), sd (snare), hh (hihat), oh (open hat),
+                 cp (clap), rim, lt, mt, ht, rd, cr, cb, sh
 
-VALID COMPLETE EXAMPLE:
+DO NOT USE: gm_acoustic_grand_piano — it does not exist. Use gm_piano.
+DO NOT USE: gm_pad_1_new_age, gm_pad_2_warm — use gm_pad_new_age, gm_pad_warm.
+
+── EFFECTS ──────────────────────────────────────────────────────
+
+.room(0.3)       reverb (always add)
+.gain(0.8)       volume
+.lpf(2000)       low-pass filter
+.delay(0.3)      echo
+
+── COMPLETE EXAMPLE ─────────────────────────────────────────────
+
 // Generated by Sheet Music to Strudel
-// Title: Ode to Joy
-// Key: C major
-// Time: 4/4 | BPM: 104
+// Title: Ode to Joy  Key: C major  Time: 4/4 | BPM: 104
 
 setcps(104/60/4)
 
-// Treble clef - melody
-$: note("<[e4 e4 f4 g4] [g4 f4 e4 d4] [c4 c4 d4 e4] [e4@2 d4@2]>/4")
-  .sound("gm_violin")
-  .room(0.3)
+// Treble clef
+$: \`<
+[e4 e4 f4 g4]
+[g4 f4 e4 d4]
+[c4 c4 d4 e4]
+[e4@2 d4@2]
+>/4\`.as("note").sound("gm_violin").room(0.3)
 
-// Bass clef - accompaniment
-$: note("<[c3@2 g3@2] [g2@2 c3@2] [a2@2 e3@2] [c3@4]>/4")
-  .sound("gm_acoustic_bass")
-  .room(0.3)
+// Bass clef
+$: \`<
+[c3@2 g3@2]
+[g2@2 c3@2]
+[a2@2 e3@2]
+[c3@4]
+>/4\`.as("note").sound("gm_acoustic_bass").room(0.3)
+
+── ALTERNATING PATTERNS ─────────────────────────────────────────
+
+<a b>     = alternate a and b each cycle
+<a b c>/3 = cycle through a, b, c over 3 cycles
+
+── PARALLELISM INSIDE MINI-NOTATION ─────────────────────────────
+
+Comma inside string = simultaneous patterns:
+  sound("bd hh, cp")   = bd+hh and cp playing together
+
+── SCALE / DEGREE FORM (for melodic lines) ──────────────────────
+
+n("0 1 2 3 4 5 6").scale("C4:major")   = C major scale from C4
+n("0 1 2 3").scale("D4:minor")         = D minor scale from D4
+chord("<C Am F G>").voicing().s("gm_piano")
+
+── EUCLIDEAN RHYTHMS ────────────────────────────────────────────
+
+s("bd(3,8)")   = 3 kicks spread evenly over 8 slots (Euclidean)
+s("hh(7,8)")   = 7 hihats over 8 slots
+
 `
 
 const API_KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY
