@@ -159,32 +159,36 @@ function buildBeatGrid(notes, beatStart, beatDuration) {
   return grid
 }
 
-// Converts a voice's note list to the Strudel mini-notation string for one measure.
-// notes: [{pitch, startTime, duration}] — startTime and duration in beats, 0-based.
-// Notes that span beat boundaries are represented with `_` sustain tokens in the
-// following beats so duration information is preserved after grid simplification.
-function measureToStrudelString(notes, beatsPerMeasure, measureDuration) {
-  const beatDuration = measureDuration / beatsPerMeasure
-  const beatGrids    = []
+// Converts a voice's timed note list to a Strudel mini-notation string for one measure.
+// Uses absolute @N weight notation so every note's real duration is preserved:
+//   quarter = c4 (no modifier), half = c4@2, eighth = c4@0.5, etc.
+// Chord notes (same startTime) are grouped as [p1,p2]@N. All-rest groups → ~@N.
+function measureToStrudelString(notes, _beatsPerMeasure, _measureDuration) {
+  if (notes.length === 0) return '~'
 
-  for (let i = 0; i < beatsPerMeasure; i++) {
-    const beatStart = i * beatDuration
-    const beatEnd   = beatStart + beatDuration
-    const beatNotes = notes.filter(n =>
-      n.startTime >= beatStart - 0.001 && n.startTime < beatEnd - 0.001
-    )
-
-    // A prior non-rest note that spans into this beat → sustain marker
-    const isSustainBeat = beatNotes.length === 0 && notes.some(n =>
-      n.startTime < beatStart - 0.001 &&
-      n.startTime + n.duration > beatStart + 0.001 &&
-      n.pitch !== 'rest'
-    )
-
-    beatGrids.push(isSustainBeat ? ['_'] : buildBeatGrid(beatNotes, beatStart, beatDuration))
+  // Group simultaneous notes by startTime (chords share the same startTime)
+  const groups = []
+  for (const note of notes) {
+    const prev = groups.length > 0 ? groups[groups.length - 1] : null
+    if (prev && Math.abs(prev.startTime - note.startTime) < 0.001) {
+      prev.notes.push(note)
+    } else {
+      groups.push({ startTime: note.startTime, notes: [note], duration: note.duration })
+    }
   }
 
-  return gridToString(flattenGrid(beatGrids))
+  return groups.map(g => {
+    const dur     = g.duration
+    const durRnd  = Math.round(dur * 1000) / 1000
+    const durStr  = dur === 1.0 ? '' : `@${durRnd}`
+    const restStr = dur === 1.0 ? '~' : `~@${durRnd}`
+
+    // Filter out rest pitches — they never form a chord token
+    const real = g.notes.map(n => n.pitch).filter(p => p && p !== 'rest')
+    if (real.length === 0) return restStr
+    if (real.length === 1) return real[0] + durStr
+    return '[' + real.join(',') + ']' + durStr
+  }).join(' ')
 }
 
 // ── Step 3 — convert voice notes → GridBuilder format ─────────────────────────
@@ -876,11 +880,6 @@ function mergeArrangeEntries(labels) {
 function validateOutput(code) {
   const errors = []
 
-  // Invalid @ fractions (must use bracket notation)
-  if (/@0\.(5|25|125|375|75)\b/.test(code)) {
-    errors.push('Invalid fractional @-modifier found — use bracket notation')
-  }
-
   // Bracket balance (covers all of the code, not just note strings)
   let depth = 0
   for (const ch of code) {
@@ -934,15 +933,6 @@ function autoFixCode(code) {
         out = out.replace(soundMatch[0], `.sound("${replacement}")`)
         fixCount++
       }
-    }
-
-    // Fix 2: @0.5 @0.25 @0.125 — invalid modifiers
-    if (/@0\.(5|25|125)\b/.test(out)) {
-      console.warn('[autoFix] Invalid @ modifier in line:', out)
-      out = out.replace(/@0\.5\b/g, '')
-      out = out.replace(/@0\.25\b/g, '')
-      out = out.replace(/@0\.125\b/g, '')
-      fixCount++
     }
 
     // Fix 3: division by zero

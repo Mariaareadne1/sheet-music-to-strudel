@@ -373,12 +373,30 @@ function parseMeasureNotes(measureEl, partIdx, voiceMap) {
   for (const [voiceName, notes] of Object.entries(byVoice)) {
     for (let i = 0; i < notes.length; i++) {
       if (notes[i]._isChord) {
-        notes[i].chord = true
-        if (i > 0) notes[i - 1].chord = true
+        // Never form a chord group when either note is a rest
+        if (notes[i].pitch !== 'rest' && i > 0 && notes[i - 1].pitch !== 'rest') {
+          notes[i].chord = true
+          notes[i - 1].chord = true
+        }
       }
       delete notes[i]._isChord
     }
-    result[voiceName] = notes
+
+    // Collapse any remaining all-rest chord groups to a single rest token
+    const cleaned = []
+    let i = 0
+    while (i < notes.length) {
+      const group = [notes[i]]
+      let j = i + 1
+      while (j < notes.length && notes[j].chord) { group.push(notes[j]); j++ }
+      if (group.length > 1 && group.every(n => n.pitch === 'rest')) {
+        cleaned.push({ pitch: 'rest', duration: group[0].duration })
+      } else {
+        for (const n of group) cleaned.push(n)
+      }
+      i = j
+    }
+    result[voiceName] = cleaned
   }
 
   return result

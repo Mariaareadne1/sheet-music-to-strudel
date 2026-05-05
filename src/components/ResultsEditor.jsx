@@ -48,8 +48,15 @@ export default function ResultsEditor({ code, meta, theme, thumbnail, source = '
    * that Strudel cannot decode.
    */
   function openInStrudel() {
-    const encoded = LZString.compressToEncodedURIComponent(editorCode)
-    window.open(`https://strudel.cc/#${encoded}`, '_blank', 'noopener,noreferrer')
+    try {
+      const encoded = LZString.compressToEncodedURIComponent(editorCode)
+      if (!encoded || encoded.length === 0) throw new Error('Encoding failed')
+      window.open(`https://strudel.cc/#${encoded}`, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      console.error('REPL export failed:', err)
+      navigator.clipboard.writeText(editorCode).catch(() => {})
+      alert('Could not open Strudel REPL directly. Code copied to clipboard — paste it at strudel.cc')
+    }
   }
 
   /** Writes editor content to the clipboard with a textarea fallback. */
