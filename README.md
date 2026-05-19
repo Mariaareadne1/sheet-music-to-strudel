@@ -1,29 +1,52 @@
 # 🎵 Sheet Music to Strudel
 
-> Convert sheet music, MusicXML, and MIDI files into live-coded [Strudel](https://strudel.cc) patterns — instantly.
+> Transform sheet music, MusicXML, and MIDI files into live-coded [Strudel](https://strudel.cc) patterns — instantly.
 
-![Sheet Music to Strudel](https://img.shields.io/badge/Built%20with-Claude%20AI-ff3cac?style=flat-square) ![React](https://img.shields.io/badge/React-Vite-cyan?style=flat-square) ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![Built with Claude AI](https://img.shields.io/badge/Built%20with-Claude%20AI-ff3cac?style=flat-square)
+![React + Vite](https://img.shields.io/badge/React-Vite-cyan?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![Status](https://img.shields.io/badge/Status-Active%20Development-yellow?style=flat-square)
 
 ---
 
 ## What is this?
 
-**Sheet Music to Strudel** is a web app that takes traditional music notation and translates it into [Strudel](https://strudel.cc) live coding syntax — the JavaScript port of TidalCycles used by live coders around the world.
+**Sheet Music to Strudel** is a web app that bridges traditional music notation and live coding. Upload a photo of sheet music, a MusicXML file, or a MIDI file and get back idiomatic, editable [Strudel](https://strudel.cc) code — the JavaScript port of TidalCycles used by live coders worldwide.
 
-Upload a photo of sheet music, a MusicXML file, or a MIDI file and get back idiomatic, editable Strudel code you can open directly in the Strudel REPL and start playing with immediately.
+The output opens directly in the Strudel REPL so you can immediately start playing, tweaking, and performing with it.
+
+---
+
+## Demo
+
+Upload any of these → get Strudel code → open in REPL → play
+
+```
+Bella Ciao.mxl  →  setcps(120/60/4)
+                    $: note("<[g4 e4@0.5 f4@0.5 g4] [g4@2 e4@2]>/4")
+                         .sound("gm_piano").room(0.3)
+
+Pirates.mid     →  setcps(200/60/3)  // 6/8 time
+                    $: note("<[f3@0.5 a3@0.5 d4@0.5 f3@0.5 a3@0.5 d4@0.5]>/1")
+                         .sound("gm_piano").room(0.3)
+```
 
 ---
 
 ## Features
 
-- 🖼️ **AI Vision** — Upload a photo or PDF of sheet music; Claude reads every note and rhythm
-- 🎼 **MusicXML Support** — Perfect accuracy from `.xml` and `.mxl` files (export from MuseScore, Sibelius, Finale)
-- 🎹 **MIDI Support** — Import `.mid` files from any DAW
-- ✏️ **Editable Output** — CodeMirror editor lets you tweak the generated code before exporting
-- 🚀 **One-Click Export** — Opens directly in the Strudel REPL at strudel.cc
-- 📚 **History** — Saves your last 20 conversions with thumbnails
-- 🌙 **Dark / Light Mode** — Matches your preference
-- ✅ **Auto-Validation** — Checks Strudel syntax before showing output
+| Feature | Description |
+|---------|-------------|
+| 🖼️ **AI Vision** | Upload a photo or PDF — Claude reads every note, rhythm, and key signature |
+| 🎼 **MusicXML** | Perfect accuracy from `.xml` / `.mxl` files — no AI needed |
+| 🎹 **MIDI** | Import `.mid` files from any DAW — Ableton, Logic, GarageBand |
+| ✏️ **Live Editor** | CodeMirror 6 editor — tweak the code before exporting |
+| 🚀 **REPL Export** | One click opens your code in Strudel at strudel.cc |
+| 📚 **History** | Last 20 conversions saved with thumbnails, source badges |
+| 🌙 **Dark / Light** | Theme toggle, persisted across sessions |
+| ✅ **Auto-Validation** | Syntax checked and auto-fixed before output |
+| 🎯 **Smart Instruments** | MIDI program numbers map to correct Strudel sounds |
+| 🔑 **Key Detection** | Krumhansl-Schmuckler algorithm detects key from note distribution |
 
 ---
 
@@ -31,11 +54,13 @@ Upload a photo of sheet music, a MusicXML file, or a MIDI file and get back idio
 
 | Format | Accuracy | How to get it |
 |--------|----------|---------------|
-| MusicXML (`.xml`, `.mxl`) | ⭐⭐⭐ Perfect | Export from MuseScore (free), Sibelius, Finale |
-| MIDI (`.mid`, `.midi`) | ⭐⭐⭐ Perfect | Export from any DAW — Ableton, Logic, GarageBand |
-| PDF / Image | ⭐⭐ Good | Photo of printed sheet music, scan, or PDF |
+| **MusicXML** (`.xml`, `.mxl`) | ⭐⭐⭐ Perfect | Export from [MuseScore](https://musescore.org) (free), Sibelius, Finale |
+| **MIDI** (`.mid`, `.midi`) | ⭐⭐⭐ Perfect | Export from any DAW, or download free MIDIs online |
+| **PDF / Image** | ⭐⭐ Good | Photo, scan, or PDF of printed sheet music |
 
-> **💡 Pro tip:** For the best results with PDFs, open them in [MuseScore](https://musescore.org) (free), clean up any misread notes, then export as MusicXML and upload that instead.
+> **💡 Best workflow for PDFs:** Open in [MuseScore](https://musescore.org) (free desktop app) → fix any misread notes → File → Export → MusicXML → upload that. Perfect results every time.
+
+> **💡 Free MusicXML source:** [IMSLP.org](https://imslp.org) has thousands of classical scores in MusicXML format, completely free.
 
 ---
 
@@ -43,125 +68,136 @@ Upload a photo of sheet music, a MusicXML file, or a MIDI file and get back idio
 
 ### Prerequisites
 
-- Node.js v18 or higher
-- An [Anthropic API key](https://console.anthropic.com) (for AI vision mode — not needed for MusicXML/MIDI)
+- Node.js v18+
+- An [Anthropic API key](https://console.anthropic.com) — only needed for AI vision (PDF/image). MusicXML and MIDI work with no API key.
 
-### Installation
+### Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/sheet-music-to-strudel.git
+git clone https://github.com/Mariaareadne1/sheet-music-to-strudel.git
 cd sheet-music-to-strudel
 npm install
 ```
 
-### Configuration
+### Configure
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and add your Anthropic API key:
-
+Edit `.env`:
 ```
 VITE_ANTHROPIC_API_KEY=sk-ant-your-key-here
 ```
 
-> The API key is only used for the AI vision path (PDF/image uploads). MusicXML and MIDI conversion happens entirely client-side with no API calls.
-
-### Run locally
+### Run
 
 ```bash
 npm run dev
+# → http://localhost:5173
 ```
-
-Open [http://localhost:5173](http://localhost:5173)
 
 ---
 
-## How it works
+## How It Works
 
-### AI Vision path (PDF / Image)
+### AI Vision Pipeline (PDF / Image)
 
 ```
 Upload image/PDF
       ↓
-Step 1: Key signature detection (Claude Haiku — fast)
+① Key signature detection          (Claude Haiku — fast, cheap)
       ↓
-Step 2: Verbal music description pass (Claude Sonnet)
+② Verbal score description         (Claude Sonnet — careful reading)
       ↓
-Step 3: Full JSON transcription (Claude Sonnet + image + description)
+③ Full JSON transcription          (Claude Sonnet + image + description)
       ↓
-Step 4: Strudel compiler (deterministic JS — beat-slot algorithm)
+④ Deterministic Strudel compiler   (pure JS — beat-slot algorithm)
       ↓
-Step 5: Syntax validation (Claude Haiku — fast)
+⑤ Syntax validation + auto-fix    (Claude Haiku — catches errors)
       ↓
 Editable Strudel code
 ```
 
-### MusicXML / MIDI path
+### MusicXML / MIDI Pipeline
 
 ```
 Upload .xml / .mxl / .mid
       ↓
-Parse file (browser-side, no API needed)
+Parse file (100% browser-side, no API calls)
       ↓
-Convert note data to internal JSON format
+Algorithmic key detection (Krumhansl-Schmuckler profiles)
       ↓
-Strudel compiler (same deterministic compiler)
+Deterministic Strudel compiler
       ↓
 Syntax validation
       ↓
 Editable Strudel code
 ```
 
+### The Compiler
+
+The core compiler (`strudelCompiler.js`) converts structured note data into idiomatic Strudel using:
+
+- **Absolute duration notation** — `c4@2` for half notes, `c4@0.5` for eighths — preserving exact rhythm
+- **Pattern variable reuse** — repeated measures become `const pattern_A = "..."` referenced in `arrange()`
+- **Instrument validation** — 100+ verified GM sound names from the Strudel instrument list
+- **Chord detection** — simultaneous notes grouped as `[c4,e4,g4]`
+- **Time signature awareness** — correct `setcps()` for 4/4, 3/4, 6/8, etc.
+
 ---
 
 ## Example Output
 
-Input: Ode to Joy (sheet music image)
+**Ode to Joy (from image)**
 
 ```javascript
 // Generated by Sheet Music to Strudel
-// Title: Ode to Joy
-// Key: C major
-// Time: 4/4 | BPM: 104
+// Title: Ode to Joy | Key: C major | Time: 4/4 | BPM: 104
 
 setcps(104/60/4)
 
 // Right hand (Treble clef)
-$: note("<[e4 e4 f4 g4] [g4 f4 e4 d4] [c4 c4 d4 e4] [e4@2 d4@2]>/4")
-  .sound("piano")
-  .room(0.3)
+$: `<
+[e4 e4 f4 g4]
+[g4 f4 e4 d4]
+[c4 c4 d4 e4]
+[e4@2 d4@2]
+>/4`.as("note").sound("gm_violin").room(0.3)
 
 // Left hand (Bass clef)
-$: note("<[c3@2 g3@2] [g2@2 c3@2] [a2@2 e3@2] [c3@4]>/4")
-  .sound("gm_acoustic_bass")
-  .room(0.3)
+$: `<
+[c3@2 g3@2]
+[g2@2 c3@2]
+[a2@2 e3@2]
+[c3@4]
+>/4`.as("note").sound("gm_acoustic_bass").room(0.3)
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React + Vite |
-| Code Editor | CodeMirror 6 |
-| AI Vision | Anthropic Claude API (`claude-sonnet-4-20250514`) |
-| PDF Processing | pdf.js (browser-side) |
-| MusicXML Parsing | Custom parser (DOMParser) |
-| MIDI Parsing | @tonejs/midi |
-| Strudel Export | LZString compression → strudel.cc |
-| Styling | Tailwind CSS |
-| Deployment | Vercel |
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Frontend | React + Vite | UI framework |
+| Code Editor | CodeMirror 6 | Editable output |
+| AI Vision | Claude Sonnet (`claude-sonnet-4-20250514`) | Sheet music reading |
+| AI Validation | Claude Haiku (`claude-haiku-4-5-20251001`) | Syntax checking |
+| PDF Processing | pdf.js | Browser-side PDF → image |
+| MusicXML | Custom DOMParser | `.xml` / `.mxl` parsing |
+| MIDI | @tonejs/midi | `.mid` parsing |
+| Key Detection | Krumhansl-Schmuckler | Algorithmic key analysis |
+| REPL Export | lz-string | LZString compress → strudel.cc URL |
+| Styling | Tailwind CSS | Dark terminal aesthetic |
 
 ---
 
 ## Development
 
 ```bash
-npm run dev      # Start dev server
-npm run build    # Build for production
+npm run dev      # Dev server at localhost:5173
+npm run build    # Production build
 npm run preview  # Preview production build
 ```
 
@@ -169,29 +205,24 @@ npm run preview  # Preview production build
 
 ## Roadmap
 
-- [ ] Oemer OMR integration (automatic PDF → MusicXML)
-- [ ] AI Composition mode ("make me a jazz chord progression")
-- [ ] Iterative editing ("add a bass that makes this more funky")
-- [ ] Multi-page PDF support with section detection
-- [ ] Ensemble score support (3+ staves)
-- [ ] Export to Strudel file format
-
----
-
-## Contributing
-
-This project is in active development. Issues and PRs welcome!
+- [ ] **Oemer OMR integration** — automatic PDF → MusicXML (no manual MuseScore step)
+- [ ] **AI Composition mode** — "make me a dark techno beat at 140 BPM"
+- [ ] **Iterative editing** — "add a bass that makes this more jazzy"
+- [ ] **In-app playback** — hear the output without opening the REPL
+- [ ] **Multi-page PDF** — full song scores across many pages
+- [ ] **Ensemble scores** — 3+ stave support
+- [ ] **MuseScore integration** — direct import from MuseScore files
 
 ---
 
 ## Acknowledgements
 
-- [Strudel](https://strudel.cc) by Felix Roos & contributors — the incredible live coding environment this is built for
-- [midi-strudel](https://github.com/beejsbj/midi-strudel) by beejsbj — MIDI parsing and grid building algorithms
-- [Anthropic Claude](https://anthropic.com) — AI music reading
+- [Strudel](https://strudel.cc) by Felix Roos & contributors — the live coding environment this is built for
+- [midi-strudel](https://github.com/beejsbj/midi-strudel) by beejsbj — MIDI parsing algorithms and GridBuilder inspiration
+- [Anthropic Claude](https://anthropic.com) — AI music transcription
 
 ---
 
 ## License
 
-MIT
+MIT — free to use, modify, and build on.
